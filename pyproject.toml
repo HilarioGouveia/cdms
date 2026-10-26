@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cdms"
+version = "0.1.0"
+description = "Creator Data Marketing System - Governança Semanal e Diagnóstico Heurístico"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "CDMS Engineering Team" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Office/Business :: Financial :: Spreadsheet",
+]
+
+# Dependências estritas da Fase 1 (MVP Local) conforme SDD v2.3.1
+# sqlite3 faz parte da biblioteca padrão do Python
+dependencies = [
+    "streamlit>=1.35.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
