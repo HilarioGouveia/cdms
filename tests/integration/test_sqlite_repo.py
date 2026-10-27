@@ -1,25 +1,36 @@
-import unittest
-from pathlib import Path
-from datetime import date, timedelta
+import gc
+import os
 import sqlite3
+import time
+import unittest
+from datetime import date
+from pathlib import Path
 
 from cdms.domain.entities.metric import MetricDefinition, MetricCalibration, MetricSnapshot
 from cdms.domain.entities.scenario import Scenario, ScenarioType
 from cdms.domain.entities.decision import Decision
-from cdms.domain.entities.learning import Learning, HypothesisOutcome
 from cdms.domain.entities.weekly_ritual import WeeklyRitualRecord
 from cdms.adapters.persistence.sqlite_repo import SQLiteRepository
 
 class TestSQLiteRepository(unittest.TestCase):
     def setUp(self):
         self.db_path = Path("data/test_integration.db")
-        if self.db_path.exists():
-            self.db_path.unlink()
+        self._remove_db()
         self.repo = SQLiteRepository(self.db_path)
 
     def tearDown(self):
+        del self.repo
+        gc.collect()  # Força liberação de descritores de arquivo no Windows
+        self._remove_db()
+
+    def _remove_db(self):
         if self.db_path.exists():
-            self.db_path.unlink()
+            for _ in range(5):
+                try:
+                    self.db_path.unlink()
+                    break
+                except PermissionError:
+                    time.sleep(0.05)
 
     def _get_snapshots(self):
         m_def = MetricDefinition("reach", "Alcance", "un", "desc")
@@ -27,7 +38,6 @@ class TestSQLiteRepository(unittest.TestCase):
         return [MetricSnapshot(m_def, m_cal, 2000.0)]
 
     def test_atomic_persistence_and_rollback(self):
-        # 1. Salvar ritual válido
         dec = Decision(
             id=None,
             cycle_id="2026-10-19",
@@ -49,7 +59,7 @@ class TestSQLiteRepository(unittest.TestCase):
         saved = self.repo.save_ritual_atomic(ritual)
         self.assertIsNotNone(saved.id)
 
-        # 2. Testar violação de unicidade de cycle_id -> rollback atômico
+        # Violação de unicidade de cycle_id -> rollback atômico
         dup_dec = Decision(
             id=None,
             cycle_id="2026-10-19",
@@ -70,7 +80,6 @@ class TestSQLiteRepository(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):
             self.repo.save_ritual_atomic(dup_ritual)
 
-        # Confirmar que a base continua íntegra com apenas 1 registro
         all_rituals = self.repo.list_rituals()
         self.assertEqual(len(all_rituals), 1)
 
@@ -78,7 +87,6 @@ class TestSQLiteRepository(unittest.TestCase):
         cal1 = MetricCalibration("reach", 1000.0, 5000.0)
         self.repo.save_metric_calibration(cal1)
         
-        # Atualizar mesma chave (upsert)
         cal2 = MetricCalibration("reach", 1500.0, 6000.0)
         self.repo.save_metric_calibration(cal2)
 

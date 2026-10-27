@@ -1,57 +1,95 @@
-# 🎯 Creator Data Marketing System (CDMS)
+# 🎯 Creator Data Marketing & Growth Suite
 
-Sistema de governança analítica semanal e diagnóstico heurístico de momento operacional para criadores de conteúdo e gestores de tráfego/mídia.
+Plataforma integrada de governança analítica semanal, diagnóstico de oportunidade de funil e experimentação operacional estruturada para criadores de conteúdo e gestores de mídia/tráfego.
 
-O projeto segue rigorosamente o padrão **Spec-Driven Development (SDD)**, arquitetura limpa (**Clean Architecture**), **Ports & Adapters (Arquitetura Hexagonal)** e empacotamento canónico Python com `src/` layout.
-
----
-
-## 📌 Visão Geral do MVP (Fase 1)
-
-O principal diferencial do CDMS é o **Ritual Semanal de Decisão Única**:
-
-1. **Auditoria do Ciclo Anterior:** Avaliação formal da hipótese prévia (`ACHIEVED`, `PARTIAL`, `NOT_ACHIEVED`, `INCONCLUSIVE`), amarrada ao identificador unívoco da decisão.
-2. **Ingestão das 4 Métricas Canónicas:** Coleta padronizada de Alcance, Retenção Média ponderada, CTR e Conversões, com suporte a indisponibilidade formal (`NO_EXPOSURE`, `ZERO_IMPRESSIONS`).
-3. **Diagnóstico Heurístico em Cascata:** Classificação determinística e exaustiva das **81 combinações ($3^4$)** entre `PRE_DROP`, `ANOMALY`, `SCALE`, `STABILITY` e `INCONCLUSIVE` (com diferenciação entre `MISSING_DATA` e `MIXED_SIGNALS`).
-4. **Trava da Decisão Única do Ciclo:** Definição obrigatória de ação, hipótese causal, critério de sucesso verificável e prazo de avaliação.
-5. **Persistência Atómica e Idempotente:** Armazenamento relacional em SQLite puro com transações atómicas e chave canónica `cycle_id = YYYY-MM-DD` (segunda-feira).
+O projeto segue rigorosamente o padrão **Spec-Driven Development (SDD)**, **Clean Architecture**, **Ports & Adapters (Arquitetura Hexagonal)** e empacotamento canónico Python em monólito modular via `src/` layout (PEP 517/621).
 
 ---
 
-## 🏗️ Arquitetura do Sistema
+## 🧭 Visão Geral da Suíte Integrada
 
+A suíte resolve a separação entre **governança de saúde** e **motor de aceleração**:
+
+| Módulo | Papel Metodológico | Entregáveis Principais | Especificação |
+| :--- | :--- | :--- | :--- |
+| **CDMS**<br>*(Creator Data Marketing)* | **Governança & Ritual**<br>Foco na linha de base, eliminação de métricas de vaidade e trava de decisão por ciclo. | • Ritual semanal em 4 passos<br>• Motor determinístico (81 combinações)<br>• Idempotência (`cycle_id = YYYY-MM-DD`)<br>• Snapshots imutáveis e auditoria | `docs/SDD-CDMS-001-v2.3.1.md` |
+| **CGS**<br>*(Creator Growth System)* | **Experimentação & Funil**<br>Diagnóstico de quebra monetária em $R\$$, backlog priorizado por ICE e hipóteses de 7 dias. | • Auditoria de oportunidade em $R\$<br>• Cálculo bancário via `Decimal`<br>• Ranking ICE ($Impact \times Conf \times Ease / 10$)<br>• Proposta de decisão para o CDMS | `docs/sdd-cgs-001.md` |
+
+---
+
+## 🔄 Como Funciona a Dinâmica dos Dois Módulos
+
+O sistema orquestra governança e aceleração em circuito fechado:
+
+```mermaid
+flowchart TD
+    classDef cdms fill:#ebf8ff,stroke:#3182ce,stroke-width:2px,color:#2b6cb0;
+    classDef cgs fill:#feebc8,stroke:#dd6b20,stroke-width:2px,color:#7b341e;
+    classDef link fill:#f0fff4,stroke:#38a169,stroke-width:2px,color:#22543d;
+
+    subgraph CGS_Audit [🚀 Creator Growth System: Diagnóstico & Testes]
+        direction TB
+        G1["<b>1. Auditoria de Funil em R$</b><br/>Entrada de Impressões, Cliques e Vendas.<br/>Diagnóstico da Oportunidade Estimada frente à baseline."]:::cgs
+        G2["<b>2. Backlog Priorizado por ICE</b><br/>Cadastro de hipótese de 7 dias com variável isolada<br/>(Criativo, Gancho, CTA, Oferta ou Landing Page)."]:::cgs
+        G3["<b>3. Proposta de Decisão</b><br/>Gera minuta técnica pré-formatada para o ritual."]:::cgs
+        G1 --> G2 --> G3
+    end
+
+    subgraph CDMS_Ritual [🗓️ Creator Data Marketing: Ritual Semanal de Governança]
+        direction TB
+        R1["<b>Passo 1: Avaliar Hipótese Anterior</b><br/>Learning: <i>ACHIEVED, PARTIAL, NOT_ACHIEVED, INCONCLUSIVE</i>"]:::cdms
+        R2["<b>Passo 2: Inserir Métricas Canónicas</b><br/>Alcance, Retenção Média, CTR e Conversões"]:::cdms
+        R3["<b>Passo 3: Motor Determinístico (81 Regras)</b><br/>🟢 Estabilidade | 🚀 Escala | 🔴 Risco de Queda | 🟠 Assimetria"]:::cdms
+        R4["<b>Passo 4: Travar Decisão Única</b><br/>Recebe a proposta do CGS ou entrada manual."]:::cdms
+        R1 --> R2 --> R3 --> R4
+    end
+
+    G3 -.->|Alimenta Proposta| R4
+    R4 -->|Commit Atómico do Ciclo| ClosedWeek[💾 Registro Semanal Gravado com Sucesso!]:::link
+    ClosedWeek -.->|source_cycle_id| G1
 ```
+
+---
+
+## 🏗️ Arquitetura do Sistema (`src/` layout)
+
+```text
 cdms-project/
 ├── pyproject.toml                     # Configuração de empacotamento (PEP 517/621)
 ├── pytest.ini                         # Configurações do Pytest
-├── README.md                          # Documentação executiva
-├── .gitignore                         # Regras de isolamento (ignora data/*.db)
-├── app.py                             # Bootstrap da interface Streamlit
+├── README.md                          # Documentação consolidada da suíte
+├── .gitignore                         # Isolamento de caches e data/*.db
+├── app.py                             # Bootstrap central da aplicação Streamlit
 ├── data/
 │   └── .gitkeep                       # Diretório da base SQLite local
 ├── docs/
-│   └── SDD-CDMS-001-v2.3.1.md         # Especificação formal da arquitetura e regras
+│   ├── SDD-CDMS-001-v2.3.1.md         # SDD formal do CDMS (Governança & Ritual)
+│   └── sdd-cgs-001.md                 # SDD formal do CGS v1.1.0 (Funil & Growth)
 ├── tests/
 │   ├── unit/
-│   │   ├── test_metrics.py            # Validação de entidades e cálculos numéricos
-│   │   ├── test_diagnose_scenario.py  # Teste das 81 combinações do classificador
-│   │   └── test_run_weekly_ritual.py  # Teste de fluxo de ritual e idempotência
+│   │   ├── test_metrics.py            # Validação numérica de snapshots e calibração
+│   │   ├── test_diagnose_scenario.py  # Teste exaustivo das 81 combinações heurísticas
+│   │   └── test_run_weekly_ritual.py  # Teste de orquestração e idempotência do ritual
 │   └── integration/
-│       └── test_sqlite_repo.py        # Teste de persistência e integridade transacional
+│       └── test_sqlite_repo.py        # Testes de persistência e isolamento transacional
 └── src/
-    └── cdms/
-        ├── config/
-        │   ├── settings.py            # Variáveis de ambiente, paths e fuso horário
-        │   └── container.py           # Injeção de dependências (Composition Root)
+    ├── cdms/                          # Módulo de Governança e Decisão Semanal
+    │   ├── config/                    # Settings e Container de Injeção de Dependências
+    │   ├── domain/                    # Entidades puras e ScenarioClassifier
+    │   ├── application/               # Portas (RepositoryPort) e Casos de Uso
+    │   └── adapters/
+    │       ├── persistence/           # SQLite nativo e migração 001_initial_schema.sql
+    │       └── ui/                    # Telas e componentes do Ritual Semanal
+    └── cgs/                           # Módulo de Oportunidade e Experimentação
         ├── domain/
-        │   ├── entities/              # Entidades puras (Metric, Scenario, Decision, etc.)
-        │   └── services/              # ScenarioClassifier (motor heurístico de domínio puro)
+        │   ├── entities/              # FunnelBaseline, FunnelOpportunityAudit, GrowthHypothesis
+        │   └── services/              # FunnelOpportunityAnalyzer (cálculo puro em Decimal)
         ├── application/
-        │   ├── ports/                 # RepositoryPort (Driven Port)
-        │   └── use_cases/             # Casos de uso desacoplados (Ritual, Calibração, etc.)
+        │   ├── ports/                 # GrowthRepositoryPort
+        │   └── use_cases/             # Auditoria de funil, gestão de backlog e proposta CDMS
         └── adapters/
-            ├── persistence/           # SQLiteRepository e migrações SQL nativas
-            └── ui/                    # Dashboard Streamlit e componentes modulares
+            ├── persistence/           # SQLiteGrowthRepository e migração 002_cgs_schema.sql
+            └── ui/                    # growth_engine_page.py (Diagnóstico, ICE e Baselines)
 ```
 
 ---
@@ -85,29 +123,26 @@ pip install -e ".[dev]"
 
 ### 4. Executar os Testes Automatizados
 
-A suíte cobre 100% dos testes unitários e de integração descritos na SDD v2.3.1 (incluindo as 81 combinações do motor e rollback transacional):
+A suíte cobre 100% dos testes unitários e de integração descritos nas especificações:
 
 ```bash
 pytest
 ```
-*Ou utilizando o executor nativo do Python:*
-```bash
-python -m unittest discover -s tests -v
-```
 
-### 5. Iniciar a Interface Streamlit
+### 5. Iniciar a Aplicação Streamlit
 
 ```bash
 streamlit run app.py
 ```
 
-O dashboard estará acessível em `http://localhost:8501`.
+O painel estará disponível em `http://localhost:8501`.
 
 ---
 
-## 📊 Tabela de Cenários e Regras de Precedência
+## 📊 Regras Operacionais dos Motores
 
-O motor avalia o vetor das 4 métricas canónicas com precedência estrita:
+### 1. Motor Heurístico do CDMS (Cascata de Precedência Estrita)
+Avalia as 4 métricas canónicas (`reach`, `avg_retention_pct`, `ctr_pct`, `conversions`) contra suas faixas saudáveis:
 
 | Precedência | Cenário | Condição Lógica Estrita | Cobertura Teórica |
 | :---: | :--- | :--- | :---: |
@@ -117,25 +152,33 @@ O motor avalia o vetor das 4 métricas canónicas com precedência estrita:
 | **4** | `STABILITY` (Equilíbrio Nominal) | $0$ métricas em `BELOW` e $\le 1$ métrica em `ABOVE` | 5 combinações (6.2%) |
 | **Fallback** | `INCONCLUSIVE` (Sinais Mistos) | $1$ métrica em `BELOW` e $3$ em `HEALTHY` | 4 combinações (4.9%) |
 
-> **Nota:** Se qualquer métrica canônica faltar ou estiver marcada como indisponível (`is_available = False`), a Guarda Prévia retorna imediatamente `INCONCLUSIVE` com motivo `MISSING_DATA`.
+### 2. Motor de Oportunidade Financeira do CGS
+Calcula a oportunidade estimada frente à linha de base calibrada sem inferência espúria de dados:
+* **Entradas Explícitas:** Impressões, Cliques observados e Vendas/Conversões (sem estimar cliques multiplicando alcance por CTR).
+* **Precisão Decimal:** Valores tratados com classe `Decimal` e arredondamento `ROUND_HALF_UP`.
+* **Desempate Estável de Gargalo:** Quando as oportunidades de Intenção e Conversão empatam positivamente, o sistema classifica como `CONVERSION` devido à proximidade direta com o fluxo de caixa.
+
+### 3. Matriz de Priorização ICE
+$$\text{ICE Score} = \frac{\text{Impacto (1-10)} \times \text{Confiança (1-10)} \times \text{Facilidade (1-10)}}{10}$$
+* Ordenação estável: `ice_score DESC`, `created_at ASC`, `id ASC`.
 
 ---
 
-## 💾 Governança do Banco SQLite e Backups
+## 💾 Banco de Dados, Integridade e Backups
 
-Conforme a seção 6.2 da SDD v2.3.1:
-
-* O banco de dados de desenvolvimento é mantido em `data/cdms_dev.db`.
-* O esquema relacional habilita chaves estrangeiras (`PRAGMA foreign_keys = ON;`) e migrações rastreadas em `schema_migrations`.
-* Para gerar backup consistente a frio (com a aplicação fechada):
+* **Base Unificada:** `data/cdms_dev.db` gerenciada nativamente via `sqlite3`.
+* **Migrações Aplicadas Automaticamente:**
+  * `001_initial_schema.sql`: Tabelas do CDMS (`rituals`, `metric_snapshots`, `decisions`, `learnings`).
+  * `002_cgs_schema.sql`: Tabelas do CGS (`growth_baselines`, `funnel_opportunity_audits`, `growth_hypotheses`).
+* **Backup Consistente a Frio (Aplicação Fechada):**
   ```bash
-  sqlite3 data/cdms_dev.db ".backup 'data/backup_cdms_$(date +%Y%m%d).db'"
+  sqlite3 data/cdms_dev.db ".backup 'data/backup_suite_$(date +%Y%m%d).db'"
   ```
 
 ---
 
 ## 🗺️ Roadmap de Evolução
 
-* **Fase 1 (MVP Local - Concluída):** Monólito Streamlit + SQLite nativo, foco no ritual e governança analítica semanal.
-* **Fase 2 (Nuvem & Multi-Tenant):** FastAPI REST API, PostgreSQL, Alembic, autenticação OAuth2/JWT e suporte a múltiplos criadores/canais.
-* **Fase 3 (Automação & IA):** Conectores de dados (YouTube, Meta, TikTok), Creator Health Index e geração assistida de hipóteses com LLMs.
+* **Fase 1 (MVP Local - Concluída):** Monólito modular Streamlit + SQLite com CDMS operacional e CGS desacoplado em `src/cgs`.
+* **Fase 2 (Nuvem & Multi-Tenant):** Endpoints REST via FastAPI, migração para PostgreSQL, autenticação OAuth2/JWT e workspaces multi-canal.
+* **Fase 3 (Automação & IA):** Ingestão automática via APIs de plataformas (YouTube, Meta, TikTok) e sugestão heurística de hipóteses assistida por LLMs.
