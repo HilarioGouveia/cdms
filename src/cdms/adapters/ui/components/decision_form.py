@@ -1,11 +1,17 @@
-import streamlit as st
-from datetime import date, timedelta
+from datetime import date
 from typing import Tuple
+import streamlit as st
+
 
 def render_decision_form(default_due_date: date) -> Tuple[str, str, str, date, str]:
     """Renderiza a trava da decisão única com critério e prazo verificáveis."""
     st.markdown("#### 🎯 Trava da Decisão Única do Ciclo")
     st.caption("A governança do CDMS exige exatamente uma decisão prioritária para garantir a causalidade experimental.")
+
+    # Proteção contra StreamlitValueBelowMinError:
+    # Garante que min_value nunca seja estritamente maior que o valor default inicial
+    today = date.today()
+    safe_min_value = min(default_due_date, today) if default_due_date else today
 
     col1, col2 = st.columns(2)
     with col1:
@@ -28,7 +34,7 @@ def render_decision_form(default_due_date: date) -> Tuple[str, str, str, date, s
         due_date = st.date_input(
             "Prazo de Avaliação (Data Limite)",
             value=default_due_date,
-            min_value=date.today(),
+            min_value=safe_min_value,
             key="dec_due_date"
         )
         owner = st.text_input("Responsável pela Execução", value="Creator", key="dec_owner")
