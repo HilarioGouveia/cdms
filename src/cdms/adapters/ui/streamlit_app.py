@@ -23,7 +23,7 @@ def load_css():
 
 def run_app():
     st.set_page_config(
-        page_title="CDMS — Creator Data Marketing System",
+        page_title="Creator Data Marketing System (CDMS)",
         page_icon="🎯",
         layout="wide"
     )
@@ -33,7 +33,7 @@ def run_app():
     repo = container.repository
     settings = container.settings
 
-    st.title("🎯 CDMS — Creator Data Marketing System")
+    st.title("🎯 Creator Data Marketing System (CDMS)")
     st.caption(f"Governança de Decisão e Diagnóstico Heurístico | Regras v{settings.RULES_VERSION}")
 
     tab_ritual, tab_history, tab_export, tab_config = st.tabs([
