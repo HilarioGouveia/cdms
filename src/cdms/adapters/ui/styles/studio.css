@@ -1,0 +1,35 @@
+/* Studio shell. Widget semantics and focus indicators remain native. */
+.st-key-studio_titlebar {
+    padding: 12px 16px;
+    background: #161f30;
+    border: 1px solid #283549;
+    border-radius: 10px;
+    align-items: center;
+}
+.st-key-studio_context { padding: 12px 4px; align-items: center; }
+.st-key-studio_dock { padding: 12px 4px; border-right: 1px solid #283549; }
+.st-key-studio_dock button { min-height: 48px; }
+.st-key-studio_dock button [data-testid="stMarkdownContainer"] {
+    position: absolute; width: 1px; height: 1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.st-key-studio_explorer_panel, .st-key-studio_evidence_panel {
+    background: #161f30; border: 1px solid #283549;
+    border-radius: 10px; padding: 16px; min-height: 560px;
+}
+.st-key-studio_editor { padding: 8px 16px; min-height: 560px; }
+.st-key-studio_opportunity { border-left: 3px solid #6ee7b7; }
+.st-key-studio_opportunity [data-testid="stMetricValue"] {
+    color: #6ee7b7; font-variant-numeric: tabular-nums;
+}
+.st-key-studio_statusbar { border-top: 1px solid #283549; padding: 8px 12px; }
+@media (max-width: 900px) {
+    .st-key-studio_explorer_panel, .st-key-studio_evidence_panel,
+    .st-key-studio_editor { min-height: auto; padding: 12px; }
+}
+@media (max-width: 640px) {
+    .st-key-studio_dock { flex-direction: row; border-right: none; }
+    .st-key-studio_dock button [data-testid="stMarkdownContainer"] {
+        position: static; width: auto; height: auto; clip-path: none;
+    }
+}

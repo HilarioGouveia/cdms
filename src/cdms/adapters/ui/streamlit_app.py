@@ -30,16 +30,13 @@ def load_css():
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
-def run_app():
-    try:
+def run_app(*, embedded=False):
+    if not embedded:
         st.set_page_config(
             page_title="Creator Data Marketing System (CDMS)",
             page_icon="🎯",
             layout="wide",
         )
-    except Exception:
-        pass
-
     load_css()
 
     container = get_container()

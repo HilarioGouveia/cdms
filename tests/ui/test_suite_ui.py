@@ -40,6 +40,8 @@ def ui(tmp_path, monkeypatch):
         monkeypatch.setattr(import_module(module_name), "date", FixedDate)
     at = AppTest.from_file(str(APP), default_timeout=30).run()
     assert_healthy(at)
+    at.button(key="studio_nav_Governança").click().run()
+    assert_healthy(at)
     return at, config.DB_PATH
 
 
@@ -54,7 +56,7 @@ def test_navigation_and_calibrated_ritual(ui, conversion_type):
     widget(at.button, "💾 Concluir e Gravar Ritual Semanal").click().run()
     assert_healthy(at)
     assert container_module.get_container().repository.list_rituals(limit=10)
-    at.sidebar.radio[0].set_value("🚀 CGS (Growth e Funil)").run()
+    at.button(key="studio_nav_Experimentos").click().run()
     assert_healthy(at)
     assert "Creator Growth System" in at.title[0].value
     widget(at.selectbox, "Tipo de Conversão Comercial").set_value(conversion_type).run()
@@ -72,7 +74,7 @@ def test_navigation_and_calibrated_ritual(ui, conversion_type):
 ])
 def test_growth_proposal_ritual_and_audited_outcome(ui, outcome, expected_status):
     at, db_path = ui
-    at.sidebar.radio[0].set_value("🚀 CGS (Growth e Funil)").run()
+    at.button(key="studio_nav_Experimentos").click().run()
     assert_healthy(at)
     widget(at.button, "Salvar Baseline Ativa").click().run()
     assert_healthy(at)
@@ -93,7 +95,7 @@ def test_growth_proposal_ritual_and_audited_outcome(ui, outcome, expected_status
     assert pending.promoted_decision_id is None
     assert pending.target_cycle_id == "2026-11-02"
 
-    at.sidebar.radio[0].set_value("🎯 CDMS (Governança e Ritual)").run()
+    at.button(key="studio_nav_Governança").click().run()
     assert_healthy(at)
     at.date_input(key="cycle_week_start").set_value(date(2026, 11, 2)).run()
     assert_healthy(at)
@@ -122,7 +124,7 @@ def test_growth_proposal_ritual_and_audited_outcome(ui, outcome, expected_status
     audited = container_module.get_container().repository.get_ritual_by_cycle("2026-11-09")
     assert audited.learning.target_decision_id == record.decision.id
     assert audited.learning.outcome.value == outcome
-    at.sidebar.radio[0].set_value("🚀 CGS (Growth e Funil)").run()
+    at.button(key="studio_nav_Experimentos").click().run()
     assert_healthy(at)
     widget(at.selectbox, "Ciclo Alvo do Relatório").set_value("2026-11-02").run()
     assert_healthy(at)
@@ -171,3 +173,46 @@ def test_four_high_cycles_render_drift_alert_and_all_metric_charts(ui):
     assert_healthy(at)
     assert any("Recalibração Assistida" in alert.value for alert in at.warning)
     assert len(at.get("vega_lite_chart")) == 4
+
+
+def test_studio_preserves_ritual_draft_and_panel_toggles(ui):
+    at, _ = ui
+    at.text_input(key="dec_summary").set_value("Rascunho do próximo teste").run()
+    at.button(key="studio_nav_Cockpit").click().run()
+    assert_healthy(at)
+    assert any("Uma decisão de cada vez" in title.value for title in at.title)
+    at.button(key="studio_toggle_explorer").click().run()
+    at.button(key="studio_toggle_evidence").click().run()
+    assert_healthy(at)
+    assert not at.session_state["studio_explorer"]
+    assert at.session_state["studio_evidence"]
+    assert any("Evidências do ciclo" in item.value for item in at.subheader)
+    at.button(key="studio_nav_Governança").click().run()
+    assert_healthy(at)
+    assert at.text_input(key="dec_summary").value == "Rascunho do próximo teste"
+
+
+def test_cockpit_filters_saved_evidence_by_cycle(ui):
+    from decimal import Decimal
+    from cgs.domain.entities.funnel import FunnelOpportunityAudit, FunnelStage
+    at, db_path = ui
+    growth = SQLiteGrowthRepository(str(db_path))
+    growth.save_funnel_audit(FunnelOpportunityAudit(
+        source_cycle_id="2026-11-02", primary_bottleneck=FunnelStage.INTENTION,
+        intention_opportunity_reais=Decimal("1234.56"),
+        conversion_opportunity_reais=Decimal("0"),
+        total_opportunity_reais=Decimal("1234.56"), diagnosis_summary="Evidência de novembro",
+    ))
+    at.button(key="studio_nav_Cockpit").click().run()
+    at.date_input(key="studio_cycle").set_value(date(2026, 11, 2)).run()
+    assert_healthy(at)
+    assert at.metric[0].value == "R$ 1.234,56"
+    at.date_input(key="studio_cycle").set_value(date(2026, 11, 9)).run()
+    assert_healthy(at)
+    assert not at.metric
+    assert any("ainda não tem diagnóstico" in item.value for item in at.subheader)
+    at.date_input(key="studio_cycle").set_value(date(2026, 11, 10)).run()
+    assert not at.exception
+    assert any("segunda-feira" in item.value for item in at.error)
+    assert len(growth.list_funnel_audits()) == 1
+    assert not container_module.get_container().repository.list_rituals()
