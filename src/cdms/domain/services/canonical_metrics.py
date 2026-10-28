@@ -14,4 +14,3 @@ DEFAULT_CALIBRATIONS = {
     "ctr_pct": MetricCalibration("ctr_pct", 2.0, 5.0),
     "conversions": MetricCalibration("conversions", 10.0, 30.0),
 }
-
