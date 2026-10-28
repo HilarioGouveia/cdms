@@ -8,7 +8,7 @@ from uuid import uuid4
 from pydantic import EmailStr, TypeAdapter
 from cdms.adapters.persistence.sqlite_identity_repo import SQLiteIdentityRepository
 from cdms.config.security import get_password_hash, verify_password
-from cdms.config.settings import settings
+from cdms.config.workspace_storage import identity_db_path
 
 
 def main():
@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--name", required=True)
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--slug")
-    parser.add_argument("--identity-db", type=Path, default=settings.DATA_DIR / "identity.db")
+    parser.add_argument("--identity-db", type=Path, default=identity_db_path())
     args = parser.parse_args()
     email = str(TypeAdapter(EmailStr).validate_python(args.email))
     password = getpass("Senha (mínimo 12 caracteres): ")

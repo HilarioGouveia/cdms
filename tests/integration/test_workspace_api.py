@@ -18,11 +18,14 @@ PREFIX = "/api/v1"
 
 @pytest.fixture(scope="module")
 def password_hash():
-    return get_password_hash(PASSWORD)
+    # O custo da política de produção é verificado nos testes de segurança; aqui testamos autorização.
+    from passlib.hash import pbkdf2_sha256
+    return pbkdf2_sha256.using(rounds=1000).hash(PASSWORD)
 
 
 @pytest.fixture
-def api(tmp_path, password_hash):
+def api(tmp_path, password_hash, monkeypatch):
+    monkeypatch.setattr("cdms.adapters.api.main.get_password_hash", lambda _: password_hash)
     identity_path = tmp_path / "identity.db"
     identity = SQLiteIdentityRepository(identity_path)
     users = {name: identity.create_user(f"{name}@example.com", password_hash, name)
@@ -244,7 +247,7 @@ def test_ai_does_not_invent_audit_from_another_workspace(api):
     response = api.client.post(PREFIX + "/automation/ai-suggestions?source_cycle_id=2026-10-19", headers=api.login())
     assert response.status_code == 404
     assert api.client.get(PREFIX + "/growth/audits", headers=api.login()).json() == []
-    response = api.client.post(PREFIX + "/automation/connect-platform", json={"platform": "META_ADS", "account_id": "123"}, headers=api.login())
+    response = api.client.post(PREFIX + "/automation/connect-platform", json={"platform": "YOUTUBE_STUDIO", "account_id": "UC-test", "access_token": "test-only-token"}, headers=api.login())
     assert response.status_code == 501
 
 

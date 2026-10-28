@@ -38,10 +38,14 @@ api = [
     # Passlib 1.7.4 requer a API legada de bcrypt.
     "bcrypt>=3.2.0,<4.1",
     "pydantic[email]>=2.6.0",
+    "requests>=2.31.0",
+    "cryptography>=42.0.0",
 ]
 automation = [
     "celery>=5.3.6",
     "redis>=5.0.3",
+    "requests>=2.31.0",
+    "cryptography>=42.0.0",
 ]
 dev = [
     "pytest>=8.0.0",
@@ -51,3 +55,8 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["cdms*", "cgs*"]
+
+
+[tool.setuptools.package-data]
+cdms = ["adapters/persistence/schema.sql", "adapters/persistence/migrations/*.sql", "adapters/ui/styles/*.css", "adapters/ui/styles/*.json"]
+cgs = ["adapters/persistence/migrations/*.sql"]

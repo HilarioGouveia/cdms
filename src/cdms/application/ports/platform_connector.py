@@ -14,3 +14,9 @@ class PlatformConnectorPort(ABC):
     def validate_connection(self, account_id: str) -> bool:
         """Verifica validade de token de acesso e permissões de leitura."""
         pass
+
+class PlatformError(Exception):
+    """Falha sanitizada de plataforma, classificada para retentativa."""
+    def __init__(self, code, *, retryable=False):
+        self.code, self.retryable = code, retryable
+        super().__init__(code)
