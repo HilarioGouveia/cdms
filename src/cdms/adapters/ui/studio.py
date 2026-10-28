@@ -77,7 +77,7 @@ def run_studio():
                        page_icon=":material/space_dashboard:", layout="wide")
     st.html(Path(__file__).parent / "styles" / "studio.css")
     defaults = {"studio_section": "Cockpit", "studio_explorer": True,
-                "studio_evidence": False}
+                "studio_evidence": True}
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
     # Retain draft widgets when their module is not rendered. Do not retain
@@ -93,25 +93,27 @@ def run_studio():
     with st.container(key="studio_titlebar", horizontal=True):
         st.markdown(":material/space_dashboard: **CDMS STUDIO**")
         st.caption("Workspace local / Decision Cockpit")
+        st.space("stretch")
         st.button("Navegação", icon=":material/left_panel_close:",
                   key="studio_toggle_explorer", on_click=toggle, args=("studio_explorer",))
         st.button("Evidências", icon=":material/right_panel_close:",
                   key="studio_toggle_evidence", on_click=toggle, args=("studio_evidence",))
 
-    with st.container(horizontal=True, key="studio_context"):
-        st.selectbox("Workspace", ["Local · CDMS"], disabled=True,
-                     help="Banco local existente. A seleção de organizações pela API será integrada em outra etapa.")
-        today = date.today()
-        cycle = st.date_input("Ciclo de referência do Cockpit",
-                             value=today - timedelta(days=today.weekday()), key="studio_cycle")
-        st.caption("Modo local · sem autenticação · dados deste ambiente")
+        with st.popover("Workspace e ciclo", icon=":material/workspaces:"):
+            st.selectbox("Workspace", ["Local · CDMS"], disabled=True,
+                         help="Banco local existente. A seleção de organizações pela API será integrada em outra etapa.")
+            today = date.today()
+            cycle = st.date_input("Ciclo de referência do Cockpit",
+                                 value=today - timedelta(days=today.weekday()), key="studio_cycle")
+            st.caption("Modo local · sem autenticação · dados deste ambiente")
     if cycle.weekday() != 0:
         st.error("Selecione uma segunda-feira para o ciclo do Cockpit.")
         return
-    weights = [0.7] + ([2] if st.session_state.studio_explorer else []) + [7]
+    weights = [0.5] + ([2.15] if st.session_state.studio_explorer else []) + [6]
     if st.session_state.studio_evidence:
-        weights.append(2.8)
-    panels = iter(st.columns(weights, gap="small"))
+        weights.append(3.2)
+    with st.container(key="studio_workspace", gap=None):
+        panels = iter(st.columns(weights, gap=None))
     dock = next(panels)
     explorer = next(panels) if st.session_state.studio_explorer else None
     editor = next(panels)
@@ -124,17 +126,21 @@ def run_studio():
     if explorer is not None:
         with explorer, st.container(key="studio_explorer_panel"):
             st.caption("ESPAÇO DE TRABALHO")
-            st.subheader(st.session_state.studio_section)
-            st.caption("Local · CDMS")
-            st.code(cycle.isoformat(), language=None)
+            with st.container(border=True):
+                st.markdown(":material/folder_open: **Local · CDMS**")
+                st.divider()
+                for section, icon in SECTIONS.items():
+                    st.button(section, icon=f":material/{icon}:",
+                              type="primary" if st.session_state.studio_section == section else "tertiary",
+                              key=f"studio_tree_{section}", on_click=navigate,
+                              args=(section,), width="stretch")
+            st.caption(f"Ciclo de referência · {cycle:%d/%m/%Y}")
             descriptions = {
                 "Cockpit": "Visão do ciclo, oportunidade estimada e próximas decisões.",
                 "Governança": "Ritual semanal, histórico, exportação e calibrações.",
                 "Experimentos": "Diagnóstico do funil, backlog ICE, baseline e relatório.",
             }
             st.write(descriptions[st.session_state.studio_section])
-            st.divider()
-            st.caption("Os formulários mantêm suas datas explícitas de origem e destino. O ciclo acima filtra o Cockpit e as evidências.")
     with editor, st.container(key="studio_editor"):
         section = st.session_state.studio_section
         if section == "Cockpit":

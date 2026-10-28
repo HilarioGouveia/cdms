@@ -11,6 +11,10 @@ O ponto de entrada `app.py` abre o CDMS Studio. O shell fica em
 - Cockpit com oportunidade estimada, ritual e backlog consultados nos repositórios
   existentes. Ausência de dados aparece como estado vazio, sem números demonstrativos.
 - Cobalto para ações e menta para a oportunidade financeira, com valores em formato brasileiro.
+- Shell contínuo inspirado no Studio de referência: sem margens externas, dock
+  estreito, explorador e evidências com divisórias e barra superior compacta.
+- Workspace e ciclo acessíveis pelo controle da barra superior; explorador com
+  navegação por seção. Painel de evidências aberto inicialmente e recolhível.
 - Preservação dos campos identificados do rascunho de ritual ao navegar entre módulos.
 - Fluxos existentes de calibração, ritual, diagnóstico, hipóteses e relatórios mantidos.
 
@@ -46,4 +50,9 @@ comportamento; inspeção visual no navegador deve ser feita com o servidor em e
 Resultado desta etapa: oito casos de interface aprovados (seis fluxos existentes e
 dois casos novos do Studio). Os 39 avisos dos fluxos existentes são de depreciação
 Streamlit/pandas. O SHA-256 do banco local permaneceu inalterado. A inspeção visual
-no navegador está pendente; nenhum servidor foi iniciado nesta etapa.
+no navegador ficou pendente na entrega inicial.
+
+Na revisão do shell contínuo, os dois testes específicos do Studio passaram
+novamente e o layout foi inspecionado no navegador em 1280 × 720. A instância local
+foi reiniciada em `http://127.0.0.1:8501` para carregar as alterações, com o deploy
+oculto, fonte base de 14 px e regiões separadas por divisórias contínuas.

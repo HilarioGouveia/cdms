@@ -183,6 +183,8 @@ def test_studio_preserves_ritual_draft_and_panel_toggles(ui):
     assert any("Uma decisão de cada vez" in title.value for title in at.title)
     at.button(key="studio_toggle_explorer").click().run()
     at.button(key="studio_toggle_evidence").click().run()
+    assert not at.session_state["studio_evidence"]
+    at.button(key="studio_toggle_evidence").click().run()
     assert_healthy(at)
     assert not at.session_state["studio_explorer"]
     assert at.session_state["studio_evidence"]
