@@ -69,3 +69,6 @@ data/backups/
 
 # Streamlit runtime & credentials
 .streamlit/secrets.toml
+
+# Arquivo local de entrega (inclui banco e caches)
+/CDMS.zip
