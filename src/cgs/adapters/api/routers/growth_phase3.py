@@ -3,9 +3,9 @@
 from decimal import Decimal
 from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from cdms.adapters.api.routers.growth import InputModel as BaseModel
 
-from cdms.adapters.api.dependencies import get_current_tenant
+from cdms.adapters.api.dependencies import get_workspace_repositories, require_writer, WorkspaceRepositories
 from cdms.domain.entities.tenant import TenantContext
 from cgs.adapters.persistence.sqlite_cgs_fase3_repo import SQLiteCGSPhase3Repository
 from cgs.application.use_cases.optimize_variant_allocation import OptimizeVariantAllocationUseCase
@@ -43,10 +43,12 @@ class OptimizationResponse(BaseModel):
 @router.post("/optimize-traffic", response_model=OptimizationResponse)
 def optimize_traffic(
     payload: OptimizationRequest,
-    tenant: TenantContext = Depends(get_current_tenant),
+    store: WorkspaceRepositories = Depends(get_workspace_repositories),
+    _writer: TenantContext = Depends(require_writer),
 ):
     """Executa o ciclo contínuo de avaliação de disjuntor e alocação dinâmica por Thompson Sampling."""
-    repo = SQLiteCGSPhase3Repository()
+    store.hypothesis(payload.hypothesis_id)
+    repo = store.phase3()
     uc = OptimizeVariantAllocationUseCase(repo)
 
     arms_domain = [
@@ -84,5 +86,13 @@ def optimize_traffic(
             is_converged=res.bandit_decision.is_converged if res.bandit_decision else False,
             weights=weights,
         )
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@router.get("/allocations/{hypothesis_id}")
+def get_allocation(hypothesis_id: int, store: WorkspaceRepositories = Depends(get_workspace_repositories)):
+    store.hypothesis(hypothesis_id)
+    allocation = store.phase3().get_latest_bandit_decision(hypothesis_id)
+    if allocation is None:
+        raise HTTPException(404, "Alocação não encontrada neste workspace.")
+    return allocation

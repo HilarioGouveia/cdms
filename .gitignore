@@ -72,3 +72,10 @@ data/backups/
 
 # Arquivo local de entrega (inclui banco e caches)
 /CDMS.zip
+
+# Bancos privados dos workspaces da API
+/data/workspaces/
+data/**/*.db
+data/**/*.db-wal
+data/**/*.db-shm
+data/**/*.db-journal

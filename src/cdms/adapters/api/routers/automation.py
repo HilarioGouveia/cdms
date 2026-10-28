@@ -1,11 +1,12 @@
 """Endpoints REST da Fase 3: Conexões de APIs, Health Index e Sugestões de IA."""
 
+from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from cdms.adapters.api.routers.growth import InputModel as BaseModel
 
-from cdms.adapters.api.dependencies import get_current_tenant
+from cdms.adapters.api.dependencies import get_workspace_repositories, require_writer, WorkspaceRepositories
 from cdms.domain.entities.tenant import TenantContext
 from cdms.domain.services.ai_hypothesis_generator import AIHypothesisGenerator
 from cgs.adapters.persistence.sqlite_growth_repo import SQLiteGrowthRepository
@@ -31,28 +32,21 @@ class AISuggestionResponse(BaseModel):
 
 
 @router.post("/connect-platform")
-def connect_platform(payload: ConnectPlatformRequest, tenant: TenantContext = Depends(get_current_tenant)):
+def connect_platform(payload: ConnectPlatformRequest, tenant: TenantContext = Depends(require_writer)):
     """Conecta e valida credenciais da conta oficial (Meta Ads ou YouTube Studio)."""
-    return {
-        "status": "CONNECTED",
-        "workspace_id": tenant.workspace_id,
-        "platform": payload.platform,
-        "account_id": payload.account_id,
-    }
+    raise HTTPException(501, "Conexões reais de plataformas serão implementadas na etapa de automação.")
 
 
 @router.post("/ai-suggestions", response_model=List[AISuggestionResponse])
 def get_ai_hypothesis_suggestions(
-    source_cycle_id: str,
-    tenant: TenantContext = Depends(get_current_tenant),
+    source_cycle_id: date,
+    store: WorkspaceRepositories = Depends(get_workspace_repositories),
+    _writer: TenantContext = Depends(require_writer),
 ):
     """Gera hipóteses analíticas operacionais via raciocínio estruturado sobre o funil auditado."""
-    repo = SQLiteGrowthRepository("data/cdms_dev.db")
-    audit = repo.get_audit_by_source_cycle(source_cycle_id)
-
-    if not audit:
-        audit_uc = AuditFunnelOpportunityUseCase(repo)
-        audit = audit_uc.execute(source_cycle_id=source_cycle_id, impressions=10000, clicks=350, conversions=12)
+    audit = store.growth.get_funnel_audit(source_cycle_id.isoformat())
+    if audit is None:
+        raise HTTPException(404, "Auditoria não encontrada neste workspace.")
 
     suggestions = AIHypothesisGenerator.generate_suggestions(audit=audit)
     
