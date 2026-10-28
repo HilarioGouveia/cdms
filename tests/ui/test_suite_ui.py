@@ -23,6 +23,11 @@ def assert_healthy(at):
     assert not at.error, [e.value for e in at.error]
 
 
+def open_page(at, page):
+    at.button(key=f"studio_page_{page}").click().run()
+    assert_healthy(at)
+
+
 @pytest.fixture
 def ui(tmp_path, monkeypatch):
     config = replace(settings_module.settings, DATA_DIR=tmp_path, DB_PATH=tmp_path / "suite.db")
@@ -48,8 +53,10 @@ def ui(tmp_path, monkeypatch):
 @pytest.mark.parametrize("conversion_type", ["DIRECT_SALE", "LEAD"])
 def test_navigation_and_calibrated_ritual(ui, conversion_type):
     at, db_path = ui
+    open_page(at, "calibration")
     widget(at.button, "Salvar Novas Calibrações").click().run()
     assert_healthy(at)
+    open_page(at, "ritual")
     at.text_input(key="dec_summary").set_value("Testar CTA no início")
     at.text_area(key="dec_hypothesis").set_value("CTA cedo aumenta cliques")
     at.text_area(key="dec_criterion").set_value("CTR >= 4.5%")
@@ -59,11 +66,13 @@ def test_navigation_and_calibrated_ritual(ui, conversion_type):
     at.button(key="studio_nav_Experimentos").click().run()
     assert_healthy(at)
     assert "Creator Growth System" in at.title[0].value
+    open_page(at, "baseline")
     widget(at.selectbox, "Tipo de Conversão Comercial").set_value(conversion_type).run()
     assert_healthy(at)
     widget(at.button, "Salvar Baseline Ativa").click().run()
     assert_healthy(at)
     assert SQLiteGrowthRepository(str(db_path)).get_active_baseline() is not None
+    open_page(at, "diagnosis")
     widget(at.button, "Executar Diagnóstico Financeiro").click().run()
     assert_healthy(at)
     assert len(SQLiteGrowthRepository(str(db_path)).list_funnel_audits()) == 1
@@ -76,11 +85,14 @@ def test_growth_proposal_ritual_and_audited_outcome(ui, outcome, expected_status
     at, db_path = ui
     at.button(key="studio_nav_Experimentos").click().run()
     assert_healthy(at)
+    open_page(at, "baseline")
     widget(at.button, "Salvar Baseline Ativa").click().run()
     assert_healthy(at)
+    open_page(at, "diagnosis")
     widget(at.date_input, "Segunda-feira de Referência").set_value(date(2026, 11, 2))
     widget(at.button, "Executar Diagnóstico Financeiro").click().run()
     assert_healthy(at)
+    open_page(at, "backlog")
     widget(at.text_input, "Ação Prática").set_value("Inserir CTA claro aos 5 segundos")
     widget(at.selectbox, "Variável Única").set_value("CTA")
     widget(at.button, "Adicionar ao Backlog").click().run()
@@ -126,6 +138,7 @@ def test_growth_proposal_ritual_and_audited_outcome(ui, outcome, expected_status
     assert audited.learning.outcome.value == outcome
     at.button(key="studio_nav_Experimentos").click().run()
     assert_healthy(at)
+    open_page(at, "report")
     widget(at.selectbox, "Ciclo Alvo do Relatório").set_value("2026-11-02").run()
     assert_healthy(at)
     assert any(expected_status in element.value for element in at.markdown)
@@ -156,6 +169,7 @@ def test_four_high_cycles_render_drift_alert_and_all_metric_charts(ui):
     from cdms.adapters.ui.components.metric_inputs import CANONICAL_DEFINITIONS, DEFAULT_CALIBRATIONS
     from cdms.domain.entities.metric import MetricSnapshot
     at, _ = ui
+    open_page(at, "calibration")
     widget(at.button, "Salvar Novas Calibrações").click().run()
     assert_healthy(at)
     snapshots = [
@@ -169,7 +183,7 @@ def test_four_high_cycles_render_drift_alert_and_all_metric_charts(ui):
             decision_hypothesis="Gancho claro aumenta atenção", decision_success_criterion="Retenção >= 60%",
             decision_evaluation_due_date=start + timedelta(days=7),
         )
-    at.run()
+    open_page(at, "history")
     assert_healthy(at)
     assert any("Recalibração Assistida" in alert.value for alert in at.warning)
     assert len(at.get("vega_lite_chart")) == 4
@@ -192,6 +206,29 @@ def test_studio_preserves_ritual_draft_and_panel_toggles(ui):
     at.button(key="studio_nav_Governança").click().run()
     assert_healthy(at)
     assert at.text_input(key="dec_summary").value == "Rascunho do próximo teste"
+
+
+def test_contextual_sections_remember_selection_and_growth_draft(ui):
+    at, _ = ui
+    assert not at.tabs
+    assert not any(button.label == "Salvar Novas Calibrações" for button in at.button)
+    at.text_input(key="dec_summary").set_value("Rascunho preservado").run()
+    open_page(at, "calibration")
+    assert not any(item.key == "dec_summary" for item in at.text_input)
+    at.button(key="studio_nav_Experimentos").click().run()
+    open_page(at, "backlog")
+    widget(at.text_input, "Ação Prática").set_value("Hipótese ainda não enviada").run()
+    at.button(key="studio_nav_Governança").click().run()
+    assert at.session_state["studio_page_Governança"] == "calibration"
+    assert any(button.label == "Salvar Novas Calibrações" for button in at.button)
+    open_page(at, "ritual")
+    assert at.text_input(key="dec_summary").value == "Rascunho preservado"
+    at.button(key="studio_toggle_explorer").click().run()
+    at.button(key="studio_nav_Experimentos").click().run()
+    assert at.session_state["studio_explorer"]
+    assert at.session_state["studio_page_Experimentos"] == "backlog"
+    assert widget(at.text_input, "Ação Prática").value == "Hipótese ainda não enviada"
+    assert not SQLiteGrowthRepository(str(ui[1])).list_hypotheses()
 
 
 def test_cockpit_filters_saved_evidence_by_cycle(ui):
@@ -218,3 +255,18 @@ def test_cockpit_filters_saved_evidence_by_cycle(ui):
     assert any("segunda-feira" in item.value for item in at.error)
     assert len(growth.list_funnel_audits()) == 1
     assert not container_module.get_container().repository.list_rituals()
+
+
+def test_contextual_export_and_baseline_draft_do_not_save(ui):
+    at, db_path = ui
+    open_page(at, "export")
+    assert any("Finalize ao menos um ritual" in item.value for item in at.caption)
+    assert not at.tabs
+    assert not any(item.key == "dec_summary" for item in at.text_input)
+    at.button(key="studio_nav_Experimentos").click().run()
+    open_page(at, "baseline")
+    widget(at.number_input, "Ticket Médio do Produto Final (R$)").set_value(333.0).run()
+    open_page(at, "diagnosis")
+    open_page(at, "baseline")
+    assert widget(at.number_input, "Ticket Médio do Produto Final (R$)").value == 333.0
+    assert SQLiteGrowthRepository(str(db_path)).get_active_baseline() is None

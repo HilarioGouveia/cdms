@@ -20,7 +20,9 @@ from cgs.domain.entities.hypothesis import (
 )
 
 
-def render_growth_engine(db_path: str = "data/cdms_dev.db"):
+def render_growth_engine(db_path: str = "data/cdms_dev.db", *, section="diagnosis"):
+    if section not in {"diagnosis", "backlog", "baseline", "report"}:
+        raise ValueError("Seção de experimentos desconhecida.")
     st.title("🚀 Creator Growth System (CGS)")
     st.caption("Motor de Experimentação Operacional, Diagnóstico de Funil e Ranking ICE")
 
@@ -30,21 +32,14 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
     prop_uc = PrepareCDMSProposalUseCase(growth_repository=repo)
     export_uc = ExportCycleReportUseCase(growth_repository=repo, cdms_repository=SQLiteRepository(Path(db_path)))
 
-    tabs = st.tabs([
-        "📊 Diagnóstico de Funil",
-        "💡 Backlog & Ciclo de Vida",
-        "⚙️ Configuração de Baseline",
-        "📑 Relatório Executivo",
-    ])
-
     # =========================================================================
     # ABA 1: Diagnóstico de Funil e Histórico Acumulado
     # =========================================================================
-    with tabs[0]:
+    if section == "diagnosis":
         st.subheader("Auditoria de Oportunidade de Receita")
         active_baseline = repo.get_active_baseline()
         if not active_baseline:
-            st.warning("⚠️ Cadastre primeiro uma linha de base na aba 'Configuração de Baseline'.")
+            st.warning("Cadastre primeiro uma linha de base em 'Baseline do funil' na navegação lateral.")
         else:
             is_lead_funnel = active_baseline.conversion_type == ConversionType.LEAD
             
@@ -56,17 +51,17 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
             )
 
             col1, col2, col3 = st.columns(3)
-            source_cycle = col1.date_input("Segunda-feira de Referência", value=date.today() - timedelta(days=date.today().weekday() + 7))
-            impressions = col2.number_input("Impressões Totais", min_value=0, value=10000, step=500)
-            clicks = col3.number_input("Cliques Registados", min_value=0, value=300, step=50)
+            source_cycle = col1.date_input("Segunda-feira de Referência", value=date.today() - timedelta(days=date.today().weekday() + 7), key="growth_source_cycle")
+            impressions = col2.number_input("Impressões Totais", min_value=0, value=10000, step=500, key="growth_impressions")
+            clicks = col3.number_input("Cliques Registados", min_value=0, value=300, step=50, key="growth_clicks")
 
             leads = None
             if is_lead_funnel:
                 col_lead, col_conv = st.columns(2)
-                leads = col_lead.number_input("Leads Captados (Opt-in)", min_value=0, value=60, step=5)
-                conversions = col_conv.number_input("Vendas Concluídas (a partir dos Leads)", min_value=0, value=6, step=1)
+                leads = col_lead.number_input("Leads Captados (Opt-in)", min_value=0, value=60, step=5, key="growth_leads")
+                conversions = col_conv.number_input("Vendas Concluídas (a partir dos Leads)", min_value=0, value=6, step=1, key="growth_conversions")
             else:
-                conversions = st.number_input("Conversões / Vendas Concluídas", min_value=0, value=15, step=5)
+                conversions = st.number_input("Conversões / Vendas Concluídas", min_value=0, value=15, step=5, key="growth_conversions_2")
 
             if st.button("Executar Diagnóstico Financeiro", type="primary"):
                 try:
@@ -157,27 +152,27 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
     # =========================================================================
     # ABA 2: Backlog de Hipóteses e Ciclo de Vida
     # =========================================================================
-    with tabs[1]:
+    if section == "backlog":
         st.subheader("Nova Hipótese Operacional (Janela de 7 Dias)")
-        with st.form("new_hypothesis_form"):
-            action = st.text_input("Ação Prática", placeholder="Ex: Adicionar CTA verbal direto nos primeiros 5s")
+        with st.container(border=True, key="new_hypothesis_form"):
+            action = st.text_input("Ação Prática", placeholder="Ex: Adicionar CTA verbal direto nos primeiros 5s", key="growth_action")
             col_var, col_met, col_unit, col_dir = st.columns(4)
-            var_type = col_var.selectbox("Variável Única", [v.value for v in VariableType])
-            metric_key = col_met.text_input("Chave da Métrica", value="ctr_pct")
-            metric_unit = col_unit.text_input("Unidade", value="%")
-            direction = col_dir.selectbox("Direção", [d.value for d in MetricDirection])
+            var_type = col_var.selectbox("Variável Única", [v.value for v in VariableType], key="growth_var_type")
+            metric_key = col_met.text_input("Chave da Métrica", value="ctr_pct", key="growth_metric_key")
+            metric_unit = col_unit.text_input("Unidade", value="%", key="growth_metric_unit")
+            direction = col_dir.selectbox("Direção", [d.value for d in MetricDirection], key="growth_direction")
 
             c_base, c_target, c_floor = st.columns(3)
-            base_val = c_base.number_input("Referência Atual", value=3.0, step=0.1)
-            target_val = c_target.number_input("Meta de Sucesso", value=4.5, step=0.1)
-            floor_val = c_floor.number_input("Piso/Teto Invalidação", value=2.5, step=0.1)
+            base_val = c_base.number_input("Referência Atual", value=3.0, step=0.1, key="growth_base_val")
+            target_val = c_target.number_input("Meta de Sucesso", value=4.5, step=0.1, key="growth_target_val")
+            floor_val = c_floor.number_input("Piso/Teto Invalidação", value=2.5, step=0.1, key="growth_floor_val")
 
             c_imp, c_conf, c_ease = st.columns(3)
-            impact = c_imp.slider("Impacto (1-10)", 1, 10, 7)
-            conf = c_conf.slider("Confiança (1-10)", 1, 10, 7)
-            ease = c_ease.slider("Facilidade (1-10)", 1, 10, 8)
+            impact = c_imp.slider("Impacto (1-10)", 1, 10, 7, key="growth_impact")
+            conf = c_conf.slider("Confiança (1-10)", 1, 10, 7, key="growth_conf")
+            ease = c_ease.slider("Facilidade (1-10)", 1, 10, 8, key="growth_ease")
 
-            submitted = st.form_submit_button("Adicionar ao Backlog")
+            submitted = st.button("Adicionar ao Backlog")
             if submitted:
                 try:
                     new_h = hypo_uc.create_hypothesis(
@@ -288,7 +283,7 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
     # =========================================================================
     # ABA 3: Configuração de Baseline
     # =========================================================================
-    with tabs[2]:
+    if section == "baseline":
         st.subheader("Definição da Linha de Base Comercial")
 
         active_bl = repo.get_active_baseline()
@@ -307,15 +302,17 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
             conversion_types,
             index=init_type_idx,
             help="DIRECT_SALE para vendas diretas no checkout; LEAD para funis de opt-in com fechamento posterior.",
+            key="growth_selected_type",
         )
 
-        with st.form("baseline_form"):
+        with st.container(border=True, key="baseline_form"):
             t_price = st.number_input(
                 "Ticket Médio do Produto Final (R$)",
                 min_value=1.0,
                 value=init_ticket,
                 step=10.0,
                 format="%.2f",
+                key="growth_t_price",
             )
             e_ctr = st.number_input(
                 "CTR Esperado no Tráfego (%)",
@@ -324,6 +321,7 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
                 value=init_ctr,
                 step=0.5,
                 format="%.2f",
+                key="growth_e_ctr",
             )
 
             if selected_type == ConversionType.LEAD.value:
@@ -335,6 +333,7 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
                     step=0.5,
                     format="%.2f",
                     help="Percentual de cliques que se transformam em leads cadastrados.",
+                    key="growth_e_conv",
                 )
                 e_lead_sale = st.number_input(
                     "Taxa Esperada de Fechamento Lead → Venda (%)",
@@ -344,6 +343,7 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
                     step=0.5,
                     format="%.2f",
                     help="Percentual de leads qualificados que compram o produto.",
+                    key="growth_e_lead_sale",
                 )
             else:
                 e_conv = st.number_input(
@@ -354,10 +354,11 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
                     step=0.5,
                     format="%.2f",
                     help="Percentual de cliques que concluem a compra direta.",
+                    key="growth_e_conv_2",
                 )
                 e_lead_sale = None
 
-            if st.form_submit_button("Salvar Baseline Ativa"):
+            if st.button("Salvar Baseline Ativa"):
                 try:
                     repo.save_baseline(
                         FunnelBaseline(
@@ -376,7 +377,7 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
     # =========================================================================
     # ABA 4: Relatório Executivo Consolidado
     # =========================================================================
-    with tabs[3]:
+    if section == "report":
         st.subheader("📑 Exportador de Relatório Executivo de Ciclo")
         st.caption("Consolidação formal de auditoria de funil, governança de causalidade e decisões em Markdown.")
 
@@ -391,6 +392,7 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
             options=available_cycles,
             index=0,
             help="Selecione o ciclo semanal para compilar o relatório executivo.",
+            key="growth_selected_cycle",
         )
 
         report = export_uc.execute(cycle_id=selected_cycle)

@@ -30,7 +30,9 @@ def load_css():
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
-def run_app(*, embedded=False):
+def run_app(*, embedded=False, section="ritual"):
+    if section not in {"ritual", "history", "export", "calibration"}:
+        raise ValueError("Seção de governança desconhecida.")
     if not embedded:
         st.set_page_config(
             page_title="Creator Data Marketing System (CDMS)",
@@ -67,22 +69,13 @@ def run_app(*, embedded=False):
         for alert in drift_alerts:
             st.warning(
                 f"⚡ **Recalibração Assistida Sugerida:** {alert.message}\n\n"
-                f"Considere atualizar a meta de referência ($P_{{50}}$) para **{alert.suggested_new_p50}** na aba 'Configurações & Calibração'."
+                f"Considere atualizar a meta de referência ($P_{{50}}$) para **{alert.suggested_new_p50}** em 'Calibrações' na navegação lateral."
             )
-
-    tab_ritual, tab_history, tab_export, tab_config = st.tabs(
-        [
-            "📋 Ritual da Semana",
-            "📈 Linha do Tempo & Histórico",
-            "📄 Exportar Resumo (.md)",
-            "⚙️ Configurações & Calibração",
-        ]
-    )
 
     # =========================================================
     # TAB 1: RITUAL SEMANAL (4 Passos Canónicos)
     # =========================================================
-    with tab_ritual:
+    if section == "ritual":
         today = date.today()
         default_monday = today - timedelta(days=today.weekday())
 
@@ -125,6 +118,7 @@ def run_app(*, embedded=False):
                 target_decision_id = pending_decision.id
                 outcome_label = st.selectbox(
                     "Resultado Observado:",
+                    key="ritual_learning_outcome",
                     options=[
                         ("ACHIEVED", "✅ Meta Atingida"),
                         ("PARTIAL", "🟡 Meta Parcialmente Atingida"),
@@ -137,6 +131,7 @@ def run_app(*, embedded=False):
             with col_l2:
                 learning_notes = st.text_area(
                     "Evidências e Aprendizados Observados:",
+                    key="ritual_learning_notes",
                     placeholder="Descreva os dados que confirmaram ou refutaram o critério...",
                 )
         else:
@@ -248,7 +243,7 @@ def run_app(*, embedded=False):
     # =========================================================
     # TAB 2: HISTÓRICO & TENDÊNCIAS
     # =========================================================
-    with tab_history:
+    if section == "history":
         st.subheader("Linha do Tempo de Governança")
         rituals = container.get_history_use_case.execute_list(limit=20)
         if not rituals:
@@ -304,7 +299,7 @@ def run_app(*, embedded=False):
     # =========================================================
     # TAB 3: EXPORTAÇÃO MARKDOWN
     # =========================================================
-    with tab_export:
+    if section == "export":
         st.subheader("📄 Exportação do Relatório de Auditoria")
         rituals = container.get_history_use_case.execute_list(limit=20)
         if not rituals:
@@ -333,7 +328,7 @@ def run_app(*, embedded=False):
     # =========================================================
     # TAB 4: CALIBRAÇÃO & CONFIGURAÇÕES
     # =========================================================
-    with tab_config:
+    if section == "calibration":
         st.subheader("⚙️ Configurações Operacionais de Referência")
         current_calibs = st.session_state["active_calibs_list"]
         updated_calibs = render_calibration_editor(current_calibs)

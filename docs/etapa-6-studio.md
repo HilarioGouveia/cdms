@@ -35,8 +35,8 @@ conectado ou indicação de rollback executado.
 
 ## Próximas entregas
 
-Separar os fluxos legados em páginas contextuais, unificar rascunhos por ciclo e
-integrar seleção de workspaces autorizados via API. O modo autenticado deve consumir
+Unificar rascunhos por ciclo e integrar seleção de workspaces autorizados via API.
+O modo autenticado deve consumir
 a API com token escopado; não deve reutilizar o container global local por tenant.
 
 ## Verificação
@@ -56,3 +56,24 @@ Na revisão do shell contínuo, os dois testes específicos do Studio passaram
 novamente e o layout foi inspecionado no navegador em 1280 × 720. A instância local
 foi reiniciada em `http://127.0.0.1:8501` para carregar as alterações, com o deploy
 oculto, fonte base de 14 px e regiões separadas por divisórias contínuas.
+
+## Navegação contextual por módulo
+
+A dock seleciona Governança ou Experimentos e reabre o explorador quando fechado.
+O explorador apresenta apenas as quatro seções do módulo ativo. O centro renderiza
+somente a seção selecionada, sem as antigas abas de navegação entre páginas.
+As abas de status das hipóteses continuam dentro do backlog.
+
+Cada módulo lembra a última seção aberta. Os atalhos do Cockpit abrem diretamente
+o ritual ou o diagnóstico, mesmo quando outra seção foi usada anteriormente.
+Campos do ritual, métricas, calibrações, hipótese, diagnóstico e baseline possuem
+estado de sessão preservado durante a navegação. Isso não substitui gravação:
+somente os botões de concluir ou salvar persistem os dados no banco. Os grupos de
+campos de hipótese e baseline usam containers e botões explícitos para permitir
+preservação de rascunhos sem depender do envio de um formulário.
+
+Validação desta revisão: dez testes de interface aprovados, cobrindo fluxo completo
+CDMS/CGS, exportação sem dados, seções exclusivas, memória de navegação e rascunhos
+de ritual, hipótese e baseline. O banco local manteve seu SHA-256. A revisão visual
+desta navegação não foi concluída: o navegador de verificação não conseguiu anexar
+uma aba nesta sessão; os testes de comportamento foram executados com AppTest.

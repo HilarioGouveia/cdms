@@ -19,9 +19,31 @@ SECTIONS = {
     "Experimentos": "science",
 }
 
+PAGES = {
+    "Governança": {
+        "ritual": ("Ritual semanal", "fact_check"),
+        "history": ("Histórico e tendências", "monitoring"),
+        "export": ("Exportar resumo", "description"),
+        "calibration": ("Calibrações", "tune"),
+    },
+    "Experimentos": {
+        "diagnosis": ("Diagnóstico do funil", "analytics"),
+        "backlog": ("Backlog e hipóteses", "science"),
+        "baseline": ("Baseline do funil", "tune"),
+        "report": ("Relatório executivo", "description"),
+    },
+}
 
-def navigate(section):
+
+def navigate(section, page=None):
     st.session_state.studio_section = section
+    st.session_state.studio_explorer = True
+    if page is not None:
+        st.session_state[f"studio_page_{section}"] = page
+
+
+def select_page(section, page):
+    st.session_state[f"studio_page_{section}"] = page
 
 
 def toggle(key):
@@ -48,7 +70,7 @@ def render_cockpit(core, growth, cycle):
             st.subheader("O ciclo ainda não tem diagnóstico")
             st.write("Configure a baseline e registre o funil em Experimentos.")
         st.button("Abrir diagnóstico", icon=":material/analytics:",
-                  on_click=navigate, args=("Experimentos",), key="studio_open_growth")
+                  on_click=navigate, args=("Experimentos", "diagnosis"), key="studio_open_growth")
     left, right = st.columns(2)
     with left, st.container(border=True):
         st.subheader("Governança semanal")
@@ -57,7 +79,7 @@ def render_cockpit(core, growth, cycle):
             st.write(ritual.decision.summary)
         else:
             st.write("Ritual ainda não registrado para este ciclo.")
-        st.button("Abrir ritual", on_click=navigate, args=("Governança",),
+        st.button("Abrir ritual", on_click=navigate, args=("Governança", "ritual"),
                   key="studio_open_ritual", icon=":material/fact_check:")
     with right, st.container(border=True):
         st.subheader("Backlog priorizado")
@@ -77,13 +99,18 @@ def run_studio():
                        page_icon=":material/space_dashboard:", layout="wide")
     st.html(Path(__file__).parent / "styles" / "studio.css")
     defaults = {"studio_section": "Cockpit", "studio_explorer": True,
-                "studio_evidence": True}
+                "studio_evidence": True, "studio_page_Governança": "ritual",
+                "studio_page_Experimentos": "diagnosis"}
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
     # Retain draft widgets when their module is not rendered. Do not retain
     # ephemeral buttons, uploads, or external credentials.
+    draft_prefixes = (
+        "dec_", "val_", "avail_", "reason_", "custom_reason_", "cal_",
+        "growth_", "ritual_learning_",
+    )
     for key in list(st.session_state):
-        if key.startswith(("dec_", "val_", "avail_", "reason_", "cal_")) or key in (
+        if key.startswith(draft_prefixes) or key in (
             "cycle_week_start", "proposal_cycle", "ritual_proposal",
         ):
             st.session_state[key] = st.session_state[key]
@@ -125,15 +152,19 @@ def run_studio():
                       key=f"studio_nav_{section}", on_click=navigate, args=(section,), width="stretch")
     if explorer is not None:
         with explorer, st.container(key="studio_explorer_panel"):
-            st.caption("ESPAÇO DE TRABALHO")
+            section = st.session_state.studio_section
+            st.caption(section.upper() if section in PAGES else "ESPAÇO DE TRABALHO")
             with st.container(border=True):
                 st.markdown(":material/folder_open: **Local · CDMS**")
                 st.divider()
-                for section, icon in SECTIONS.items():
-                    st.button(section, icon=f":material/{icon}:",
-                              type="primary" if st.session_state.studio_section == section else "tertiary",
-                              key=f"studio_tree_{section}", on_click=navigate,
-                              args=(section,), width="stretch")
+                if section in PAGES:
+                    for page, (label, icon) in PAGES[section].items():
+                        st.button(label, icon=f":material/{icon}:",
+                                  type="primary" if st.session_state[f"studio_page_{section}"] == page else "tertiary",
+                                  key=f"studio_page_{page}", on_click=select_page,
+                                  args=(section, page), width="stretch")
+                else:
+                    st.markdown(":material/space_dashboard: **Visão do ciclo**")
             st.caption(f"Ciclo de referência · {cycle:%d/%m/%Y}")
             descriptions = {
                 "Cockpit": "Visão do ciclo, oportunidade estimada e próximas decisões.",
@@ -143,14 +174,17 @@ def run_studio():
             st.write(descriptions[st.session_state.studio_section])
     with editor, st.container(key="studio_editor"):
         section = st.session_state.studio_section
+        if section in PAGES:
+            page = st.session_state[f"studio_page_{section}"]
+            st.caption(f"{section} / {PAGES[section][page][0]}")
         if section == "Cockpit":
             render_cockpit(core, growth, cycle.isoformat())
         elif section == "Governança":
             from cdms.adapters.ui.streamlit_app import run_app
-            run_app(embedded=True)
+            run_app(embedded=True, section=page)
         else:
             from cgs.adapters.ui.growth_engine_page import render_growth_engine
-            render_growth_engine(db_path=str(core.settings.DB_PATH))
+            render_growth_engine(db_path=str(core.settings.DB_PATH), section=page)
     if evidence is not None:
         with evidence, st.container(key="studio_evidence_panel"):
             st.subheader("Evidências do ciclo")
