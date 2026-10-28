@@ -1,0 +1,43 @@
+"""Caso de uso: Alocar e validar orçamento de teste operacional respeitando o limite do ciclo."""
+
+from decimal import Decimal
+from cgs.application.ports.cgs_fase2_repository import CGSPhase2RepositoryPort
+from cgs.domain.entities.budget_allocation import BudgetAllocation, ExperimentRiskTier
+
+
+class AllocateExperimentBudgetUseCase:
+    def __init__(self, repository: CGSPhase2RepositoryPort, max_cycle_budget_cents: int = 500000):
+        self.repository = repository
+        self.max_cycle_budget_cents = max_cycle_budget_cents  # Padrão: R$ 5.000,00 por ciclo
+
+    def execute(
+        self,
+        hypothesis_id: int,
+        cycle_id: str,
+        amount_reais: Decimal,
+        risk_tier: ExperimentRiskTier = ExperimentRiskTier.LOW,
+        max_cpa_target_reais: Decimal = None,
+    ) -> BudgetAllocation:
+        allocated_cents = int((amount_reais * Decimal("100")).to_integral_value())
+
+        # Verifica orçamento já comprometido no ciclo
+        current_allocations = self.repository.list_budgets_by_cycle(cycle_id)
+        total_committed = sum(b.allocated_amount_cents for b in current_allocations if b.hypothesis_id != hypothesis_id)
+
+        if total_committed + allocated_cents > self.max_cycle_budget_cents:
+            available = Decimal(self.max_cycle_budget_cents - total_committed) / Decimal("100")
+            raise ValueError(
+                f"Teto orçamentário do ciclo '{cycle_id}' excedido! "
+                f"Disponível: R$ {available:,.2f}, Solicitado: R$ {amount_reais:,.2f}"
+            )
+
+        max_cpa_cents = int((max_cpa_target_reais * Decimal("100")).to_integral_value()) if max_cpa_target_reais else None
+
+        allocation = BudgetAllocation(
+            hypothesis_id=hypothesis_id,
+            cycle_id=cycle_id,
+            allocated_amount_cents=allocated_cents,
+            risk_tier=risk_tier,
+            max_cpa_target_cents=max_cpa_cents,
+        )
+        return self.repository.save_budget_allocation(allocation)

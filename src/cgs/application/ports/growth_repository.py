@@ -1,10 +1,14 @@
 """Contrato da porta de persistência para o Creator Growth System (CGS)."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from cgs.domain.entities.funnel import FunnelBaseline, FunnelOpportunityAudit
-from cgs.domain.entities.hypothesis import GrowthHypothesis, HypothesisStatus
+from cgs.domain.entities.hypothesis import (
+    GrowthHypothesis,
+    HypothesisStatus,
+    VariableType,
+)
 
 
 class GrowthRepositoryPort(ABC):
@@ -18,6 +22,11 @@ class GrowthRepositoryPort(ABC):
     @abstractmethod
     def get_funnel_audit(self, source_cycle_id: str) -> Optional[FunnelOpportunityAudit]:
         """Recupera a auditoria de funil pelo identificador do ciclo de origem."""
+        pass
+
+    @abstractmethod
+    def list_funnel_audits(self, limit: int = 50) -> List[FunnelOpportunityAudit]:
+        """Recupera o histórico cronológico de auditorias de funil gravadas."""
         pass
 
     @abstractmethod
@@ -50,12 +59,29 @@ class GrowthRepositoryPort(ABC):
         pass
 
     @abstractmethod
+    def get_active_hypothesis_by_variable(
+        self,
+        tested_variable: VariableType,
+        target_cycle_id: Optional[str] = None,
+    ) -> Optional[GrowthHypothesis]:
+        """Localiza uma hipótese ACTIVE no mesmo ciclo para a variável informada.
+
+        Garante a conformidade com a regra de variável única para isolamento causal.
+        """
+        pass
+
+    @abstractmethod
     def update_hypothesis_status(
         self,
         hypothesis_id: int,
-        status: HypothesisStatus,
+        status: Union[HypothesisStatus, str],
         target_cycle_id: Optional[str] = None,
         promoted_decision_id: Optional[int] = None,
     ) -> GrowthHypothesis:
-        """Atualiza atipicamente o status e os vínculos operacionais de uma hipótese."""
+        """Atualiza o status e os vínculos de ciclo/decisão de uma hipótese."""
+        pass
+
+    @abstractmethod
+    def get_hypothesis_by_decision_id(self, decision_id: int) -> Optional[GrowthHypothesis]:
+        """Localiza uma hipótese operacional associada ao ID de decisão do CDMS."""
         pass

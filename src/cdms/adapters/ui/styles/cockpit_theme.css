@@ -1,0 +1,135 @@
+/* Decision Cockpit - Design System para Streamlit */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+
+html, body, [class*="st-"] {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* Remover padding excessivo nativo do Streamlit */
+.main .block-container {
+    padding-top: 1.75rem !important;
+    padding-bottom: 2rem !important;
+    max-width: 95% !important;
+}
+
+/* Card Container com Glassmorphism Suave */
+.cockpit-card {
+    background: rgba(22, 31, 48, 0.75);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 1.25rem;
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.45);
+    margin-bottom: 1rem;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.cockpit-card:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+}
+
+/* KPI Hero Financeiro */
+.kpi-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.kpi-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #94A3B8;
+}
+
+.kpi-value-emerald {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2.25rem;
+    font-weight: 700;
+    color: #10B981;
+    letter-spacing: -0.02em;
+    text-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+    line-height: 1.1;
+}
+
+/* Badges e Tags de Variáveis Isoladas */
+.badge-bottleneck-amber {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    color: #FBBF24;
+    padding: 0.35rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.badge-tag {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.badge-hook {
+    background: rgba(168, 85, 247, 0.15);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    color: #C084FC;
+}
+
+.badge-offer {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #FCD34D;
+}
+
+.badge-cta {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    color: #60A5FA;
+}
+
+.badge-lp {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34D399;
+}
+
+/* Cards do Backlog ICE */
+.ice-card {
+    background: #161F30;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+    padding: 0.85rem;
+    margin-bottom: 0.65rem;
+}
+
+.ice-score-pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    color: #F1F5F9;
+}
+
+/* Botão Circuit Breaker de Risco */
+.circuit-breaker-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(239, 68, 68, 0.14);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    color: #FCA5A5;
+    font-size: 0.82rem;
+    font-weight: 600;
+}

@@ -18,46 +18,64 @@ class VariableType(str, Enum):
 
 class MetricDirection(str, Enum):
     """Direção desejada para considerar a meta da métrica atingida."""
-    HIGHER_IS_BETTER = "HIGHER_IS_BETTER"  # Ex: CTR, Taxa de Conversão, Vendas
-    LOWER_IS_BETTER = "LOWER_IS_BETTER"    # Ex: CPA, CPC, Taxa de Rejeição
+    HIGHER_IS_BETTER = "HIGHER_IS_BETTER"
+    LOWER_IS_BETTER = "LOWER_IS_BETTER"
 
 
 class HypothesisStatus(str, Enum):
     """Ciclo de vida auditável da hipótese experimental."""
-    BACKLOG = "BACKLOG"      # Registrada na esteira de priorização
-    PROPOSED = "PROPOSED"    # Pré-selecionada para preencher a decisão do ciclo
-    ACTIVE = "ACTIVE"        # Formalizada e gravada com sucesso no ritual do CDMS
-    COMPLETED = "COMPLETED"  # Ciclo executado e avaliado
-    CANCELLED = "CANCELLED"  # Descartada antes da execução
-    ARCHIVED = "ARCHIVED"    # Histórico de aprendizados concluídos
+    BACKLOG = "BACKLOG"        # Estado legado equivalente a PENDING
+    PENDING = "PENDING"        # Registrada no backlog aguardando priorização/execução
+    PROPOSED = "PROPOSED"      # Pré-selecionada / proposta para ciclo
+    ACTIVE = "ACTIVE"          # Em teste operacional no ciclo corrente
+    COMPLETED = "COMPLETED"    # Teste finalizado e auditado
+    DISCARDED = "DISCARDED"    # Descartada, invalidada ou rejeitada no ritual
+    CANCELLED = "CANCELLED"    # Descartada antes da execução (legado)
+    ARCHIVED = "ARCHIVED"      # Histórico de aprendizados concluídos (legado)
+
+
+class ConflictingActiveVariableError(ValueError):
+    """Lançada ao tentar ativar hipótese cuja variável isolada já está ativa no mesmo ciclo."""
+
+    def __init__(self, variable: VariableType, target_cycle_id: Optional[str], active_hypothesis_id: Optional[int] = None):
+        cycle_label = target_cycle_id if target_cycle_id else "ciclo corrente"
+        hypo_ref = f" (Hipótese #{active_hypothesis_id})" if active_hypothesis_id is not None else ""
+        msg = (
+            f"Violação da Regra de Variável Única: já existe teste ativo{hypo_ref} "
+            f"para a variável '{variable.value}' no ciclo '{cycle_label}'. "
+            "Conclua ou descarte o teste concorrente antes de ativar uma nova hipótese para mitigar ruído causal."
+        )
+        super().__init__(msg)
+        self.variable = variable
+        self.target_cycle_id = target_cycle_id
+        self.active_hypothesis_id = active_hypothesis_id
 
 
 @dataclass
 class GrowthHypothesis:
     """Declaração formal de experimento operacional estruturado em janela de 7 dias."""
     id: Optional[int]
-    source_cycle_id: Optional[str]         # Ciclo que motivou o teste
-    target_cycle_id: Optional[str]         # Ciclo em que o teste será executado
-    promoted_decision_id: Optional[int]    # Vínculo com a Decision persistida no CDMS
-    action_description: str                # Ação prática concreta
-    tested_variable: VariableType          # Variável única isolada
-    target_metric_key: str                 # Chave da métrica canônica ou observada
-    target_metric_unit: str                # Unidade da métrica (%, R$, un)
-    metric_direction: MetricDirection      # Direção da otimização
-    baseline_reference_value: Decimal      # Valor de referência na baseline
-    success_metric_target: Decimal         # Meta para confirmação de sucesso
-    invalidation_floor: Decimal            # Piso ou teto numérico de invalidação
-    expected_impact_description: str       # Expectativa qualitativa/quantitativa
-    impact_score: int                      # Escala 1 a 10 (rejeita bool e float)
-    confidence_score: int                  # Escala 1 a 10
-    ease_score: int                        # Escala 1 a 10
-    sample_exposure_minimum: int = 100     # Exposição mínima requerida (impressões/visitas)
-    window_days: int = 7                   # Janela operacional de 7 dias
-    status: HypothesisStatus = HypothesisStatus.BACKLOG
+    source_cycle_id: Optional[str]
+    target_cycle_id: Optional[str]
+    promoted_decision_id: Optional[int]
+    action_description: str
+    tested_variable: VariableType
+    target_metric_key: str
+    target_metric_unit: str
+    metric_direction: MetricDirection
+    baseline_reference_value: Decimal
+    success_metric_target: Decimal
+    invalidation_floor: Decimal
+    expected_impact_description: str
+    impact_score: int
+    confidence_score: int
+    ease_score: int
+    sample_exposure_minimum: int = 100
+    window_days: int = 7
+    status: HypothesisStatus = HypothesisStatus.PENDING
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def __post_init__(self):
-        # Validação das notas do ICE
         for name, score in [
             ("impact", self.impact_score),
             ("confidence", self.confidence_score),
@@ -68,7 +86,6 @@ class GrowthHypothesis:
             if not (1 <= score <= 10):
                 raise ValueError(f"{name}_score deve estar estritamente entre 1 e 10.")
 
-        # Validação numérica de metas
         for name, val in [
             ("baseline_reference_value", self.baseline_reference_value),
             ("success_metric_target", self.success_metric_target),
@@ -97,6 +114,26 @@ class GrowthHypothesis:
 
     @property
     def ice_score(self) -> Decimal:
-        """Calcula o score de priorização ICE: (I * C * E) / 10."""
         score = (Decimal(self.impact_score) * Decimal(self.confidence_score) * Decimal(self.ease_score)) / Decimal("10")
         return score.quantize(Decimal("0.01"))
+
+
+    def activate(self, target_cycle_id: Optional[str] = None, promoted_decision_id: Optional[int] = None) -> None:
+        if self.status not in (HypothesisStatus.PENDING, HypothesisStatus.BACKLOG, HypothesisStatus.PROPOSED):
+            raise ValueError(f"Apenas hipóteses PENDING podem ser ativadas. Status atual: {self.status.value}")
+        self.status = HypothesisStatus.ACTIVE
+        if target_cycle_id:
+            self.target_cycle_id = target_cycle_id
+        if promoted_decision_id:
+            self.promoted_decision_id = promoted_decision_id
+
+
+    def complete(self) -> None:
+        if self.status != HypothesisStatus.ACTIVE:
+            raise ValueError(f"Apenas hipóteses ACTIVE podem ser concluídas. Status atual: {self.status.value}")
+        self.status = HypothesisStatus.COMPLETED
+
+    def discard(self) -> None:
+        if self.status in (HypothesisStatus.COMPLETED, HypothesisStatus.DISCARDED, HypothesisStatus.ARCHIVED):
+            raise ValueError(f"Hipótese já encerrada com status {self.status.value}.")
+        self.status = HypothesisStatus.DISCARDED

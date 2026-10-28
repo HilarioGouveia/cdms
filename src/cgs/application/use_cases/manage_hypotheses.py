@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from cgs.application.ports.growth_repository import GrowthRepositoryPort
 from cgs.domain.entities.hypothesis import (
+    ConflictingActiveVariableError,
     GrowthHypothesis,
     HypothesisStatus,
     MetricDirection,
@@ -36,7 +37,7 @@ class ManageHypothesesUseCase:
         sample_exposure_minimum: int = 100,
         window_days: int = 7,
     ) -> GrowthHypothesis:
-        """Cria e persiste uma hipótese no status BACKLOG com pontuação ICE calculada."""
+        """Cria e persiste uma hipótese no status PENDING com pontuação ICE calculada."""
         hypothesis = GrowthHypothesis(
             id=None,
             source_cycle_id=source_cycle_id,
@@ -56,20 +57,67 @@ class ManageHypothesesUseCase:
             ease_score=ease_score,
             sample_exposure_minimum=sample_exposure_minimum,
             window_days=window_days,
-            status=HypothesisStatus.BACKLOG,
+            status=HypothesisStatus.PENDING,
         )
         return self._repository.save_hypothesis(hypothesis)
 
     def get_ranked_backlog(self, limit: int = 20) -> List[GrowthHypothesis]:
-        """Retorna o backlog priorizado estritamente por ICE score decrescente."""
-        return self._repository.list_hypotheses(status=HypothesisStatus.BACKLOG, limit=limit)
+        """Retorna as hipóteses pendentes priorizadas estritamente por ICE score decrescente."""
+        return self._repository.list_hypotheses(status=HypothesisStatus.PENDING, limit=limit)
 
-    def archive_hypothesis(self, hypothesis_id: int) -> GrowthHypothesis:
-        """Move uma hipótese para status ARCHIVED."""
+    def list_by_status(self, status: HypothesisStatus, limit: int = 50) -> List[GrowthHypothesis]:
+        """Lista hipóteses por qualquer status do ciclo de vida."""
+        return self._repository.list_hypotheses(status=status, limit=limit)
+
+    def activate_hypothesis(
+        self,
+        hypothesis_id: int,
+        target_cycle_id: Optional[str] = None,
+        promoted_decision_id: Optional[int] = None,
+    ) -> GrowthHypothesis:
+        """Aplica a regra de variável única e ativa uma hipótese para teste operacional no ciclo."""
         hypo = self._repository.get_hypothesis_by_id(hypothesis_id)
         if not hypo:
             raise ValueError(f"Hipótese com ID {hypothesis_id} não encontrada.")
+
+        # Validação de isolamento causal: verificar se já existe hipótese ACTIVE testando a mesma variável
+        conflicting_hypo = self._repository.get_active_hypothesis_by_variable(
+            tested_variable=hypo.tested_variable,
+            target_cycle_id=target_cycle_id,
+        )
+        if conflicting_hypo and conflicting_hypo.id != hypo.id:
+            raise ConflictingActiveVariableError(
+                variable=hypo.tested_variable,
+                target_cycle_id=target_cycle_id,
+                active_hypothesis_id=conflicting_hypo.id,
+            )
+
+        hypo.activate(target_cycle_id=target_cycle_id, promoted_decision_id=promoted_decision_id)
         return self._repository.update_hypothesis_status(
             hypothesis_id=hypothesis_id,
-            status=HypothesisStatus.ARCHIVED,
+            status=hypo.status,
+            target_cycle_id=hypo.target_cycle_id,
+            promoted_decision_id=hypo.promoted_decision_id,
+        )
+
+    def complete_hypothesis(self, hypothesis_id: int) -> GrowthHypothesis:
+        """Aplica regra de negócio e conclui uma hipótese após auditoria do ciclo."""
+        hypo = self._repository.get_hypothesis_by_id(hypothesis_id)
+        if not hypo:
+            raise ValueError(f"Hipótese com ID {hypothesis_id} não encontrada.")
+        hypo.complete()
+        return self._repository.update_hypothesis_status(
+            hypothesis_id=hypothesis_id,
+            status=hypo.status,
+        )
+
+    def discard_hypothesis(self, hypothesis_id: int) -> GrowthHypothesis:
+        """Aplica regra de negócio e descarta/invalida uma hipótese."""
+        hypo = self._repository.get_hypothesis_by_id(hypothesis_id)
+        if not hypo:
+            raise ValueError(f"Hipótese com ID {hypothesis_id} não encontrada.")
+        hypo.discard()
+        return self._repository.update_hypothesis_status(
+            hypothesis_id=hypothesis_id,
+            status=hypo.status,
         )

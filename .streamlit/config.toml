@@ -1,0 +1,12 @@
+[theme]
+base = "dark"
+primaryColor = "#10B981"               # Emerald / Mint (Crescimento e Aceleração)
+backgroundColor = "#0B0F17"            # Deep Obsidian / Carbon
+secondaryBackgroundColor = "#161F30"   # Slate Surface / Cards
+textColor = "#F1F5F9"                  # Alto contraste
+font = "sans serif"
+
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = true

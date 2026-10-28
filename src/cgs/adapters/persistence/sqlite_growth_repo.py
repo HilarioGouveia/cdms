@@ -3,7 +3,7 @@
 import sqlite3
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from cgs.application.ports.growth_repository import GrowthRepositoryPort
 from cgs.domain.entities.funnel import (
@@ -39,6 +39,8 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TEXT);"
             )
+            
+            # Migração 2: tabelas base do CGS
             cursor = conn.execute("SELECT version FROM schema_version WHERE version = 2;")
             if not cursor.fetchone():
                 conn.executescript(
@@ -86,7 +88,7 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
                         ice_score TEXT NOT NULL,
                         sample_exposure_minimum INTEGER NOT NULL DEFAULT 100,
                         window_days INTEGER NOT NULL DEFAULT 7,
-                        status TEXT NOT NULL DEFAULT 'BACKLOG',
+                        status TEXT NOT NULL DEFAULT 'PENDING',
                         created_at TEXT NOT NULL
                     );
 
@@ -100,6 +102,32 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
                     (datetime.now(timezone.utc).isoformat(),),
                 )
                 conn.commit()
+
+            # Migração 3: funil em 2 passos e índices de concorrência
+            cursor3 = conn.execute("SELECT version FROM schema_version WHERE version = 3;")
+            if not cursor3.fetchone():
+                for col_def in ("leads_opportunity_reais TEXT", "closing_opportunity_reais TEXT"):
+                    try:
+                        conn.execute(f"ALTER TABLE funnel_opportunity_audits ADD COLUMN {col_def};")
+                    except sqlite3.OperationalError:
+                        pass
+
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_cgs_hypotheses_active_var ON growth_hypotheses(status, tested_variable, target_cycle_id);"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_cgs_hypotheses_decision ON growth_hypotheses(promoted_decision_id);"
+                )
+                conn.execute(
+                    "INSERT INTO schema_version (version, applied_at) VALUES (3, ?);",
+                    (datetime.now(timezone.utc).isoformat(),),
+                )
+                conn.commit()
+
+
+    # =========================================================================
+    # BASELINES COMERCIAIS
+    # =========================================================================
 
     def save_baseline(self, baseline: FunnelBaseline) -> FunnelBaseline:
         with self._get_connection() as conn:
@@ -146,6 +174,10 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
                 lead_to_sale_rate_pct=Decimal(row["lead_to_sale_rate_pct"]) if row["lead_to_sale_rate_pct"] else None,
             )
 
+    # =========================================================================
+    # AUDITORIAS DE FUNIL E HISTÓRICO
+    # =========================================================================
+
     def save_funnel_audit(self, audit: FunnelOpportunityAudit) -> FunnelOpportunityAudit:
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -154,8 +186,9 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
                 INSERT INTO funnel_opportunity_audits (
                     source_cycle_id, primary_bottleneck, intention_opportunity_reais,
                     conversion_opportunity_reais, total_opportunity_reais,
-                    diagnosis_summary, calculation_version, calculated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    diagnosis_summary, calculation_version, leads_opportunity_reais,
+                    closing_opportunity_reais, calculated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     audit.source_cycle_id,
@@ -165,6 +198,8 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
                     str(audit.total_opportunity_reais),
                     audit.diagnosis_summary,
                     audit.calculation_version,
+                    str(audit.leads_opportunity_reais) if audit.leads_opportunity_reais is not None else None,
+                    str(audit.closing_opportunity_reais) if audit.closing_opportunity_reais is not None else None,
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
@@ -177,7 +212,8 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
                 """
                 SELECT source_cycle_id, primary_bottleneck, intention_opportunity_reais,
                        conversion_opportunity_reais, total_opportunity_reais,
-                       diagnosis_summary, calculation_version
+                       diagnosis_summary, calculation_version, leads_opportunity_reais,
+                       closing_opportunity_reais
                 FROM funnel_opportunity_audits
                 WHERE source_cycle_id = ?
                 ORDER BY id DESC LIMIT 1
@@ -187,20 +223,33 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
             row = cursor.fetchone()
             if not row:
                 return None
-            return FunnelOpportunityAudit(
-                source_cycle_id=row["source_cycle_id"],
-                primary_bottleneck=FunnelStage(row["primary_bottleneck"]),
-                intention_opportunity_reais=Decimal(row["intention_opportunity_reais"]),
-                conversion_opportunity_reais=Decimal(row["conversion_opportunity_reais"]),
-                total_opportunity_reais=Decimal(row["total_opportunity_reais"]),
-                diagnosis_summary=row["diagnosis_summary"],
-                calculation_version=row["calculation_version"],
-            )
+            return self._row_to_funnel_audit(row)
+
+    def list_funnel_audits(self, limit: int = 50) -> List[FunnelOpportunityAudit]:
+        """Recupera o histórico cronológico de auditorias ordenadas por ciclo mais recente."""
+        with self._get_connection() as conn:
+            query = """
+                SELECT source_cycle_id, primary_bottleneck, intention_opportunity_reais,
+                       conversion_opportunity_reais, total_opportunity_reais,
+                       diagnosis_summary, calculation_version, leads_opportunity_reais,
+                       closing_opportunity_reais
+                FROM funnel_opportunity_audits
+                ORDER BY source_cycle_id DESC, id DESC
+                LIMIT ?
+            """
+            cursor = conn.execute(query, (limit,))
+            return [self._row_to_funnel_audit(row) for row in cursor.fetchall()]
+
+    # =========================================================================
+    # HIPÓTESES OPERACIONAIS
+    # =========================================================================
 
     def save_hypothesis(self, hypothesis: GrowthHypothesis) -> GrowthHypothesis:
         with self._get_connection() as conn:
             cursor = conn.cursor()
             now_iso = datetime.now(timezone.utc).isoformat()
+            status_val = hypothesis.status.value if isinstance(hypothesis.status, HypothesisStatus) else str(hypothesis.status)
+
             if hypothesis.id is None:
                 cursor.execute(
                     """
@@ -232,7 +281,7 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
                         str(hypothesis.ice_score),
                         hypothesis.sample_exposure_minimum,
                         hypothesis.window_days,
-                        hypothesis.status.value,
+                        status_val,
                         now_iso,
                     ),
                 )
@@ -268,7 +317,7 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
                         str(hypothesis.ice_score),
                         hypothesis.sample_exposure_minimum,
                         hypothesis.window_days,
-                        hypothesis.status.value,
+                        status_val,
                         hypothesis.id,
                     ),
                 )
@@ -285,6 +334,18 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
                 return None
             return self._row_to_hypothesis(row)
 
+    def get_hypothesis_by_decision_id(self, decision_id: int) -> Optional[GrowthHypothesis]:
+        """Recupera a hipótese associada à decisão do CDMS."""
+        with self._get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM growth_hypotheses WHERE promoted_decision_id = ? ORDER BY id DESC LIMIT 1;",
+                (decision_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return self._row_to_hypothesis(row)
+
     def list_hypotheses(
         self,
         status: Optional[HypothesisStatus] = None,
@@ -292,25 +353,71 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
     ) -> List[GrowthHypothesis]:
         with self._get_connection() as conn:
             if status:
-                query = "SELECT * FROM growth_hypotheses WHERE status = ? ORDER BY CAST(ice_score AS REAL) DESC, created_at ASC, id ASC LIMIT ?"
-                params = (status.value, limit)
+                status_val = status.value if isinstance(status, HypothesisStatus) else str(status)
+                if status_val in ("BACKLOG", "PENDING"):
+                    query = """
+                        SELECT * FROM growth_hypotheses 
+                        WHERE status IN ('BACKLOG', 'PENDING') 
+                        ORDER BY CAST(ice_score AS REAL) DESC, created_at ASC, id ASC 
+                        LIMIT ?
+                    """
+                    params = (limit,)
+                else:
+                    query = """
+                        SELECT * FROM growth_hypotheses 
+                        WHERE status = ? 
+                        ORDER BY CAST(ice_score AS REAL) DESC, created_at ASC, id ASC 
+                        LIMIT ?
+                    """
+                    params = (status_val, limit)
             else:
                 query = "SELECT * FROM growth_hypotheses ORDER BY CAST(ice_score AS REAL) DESC, created_at ASC, id ASC LIMIT ?"
                 params = (limit,)
             cursor = conn.execute(query, params)
             return [self._row_to_hypothesis(row) for row in cursor.fetchall()]
 
+    def get_active_hypothesis_by_variable(
+        self,
+        tested_variable: VariableType,
+        target_cycle_id: Optional[str] = None,
+    ) -> Optional[GrowthHypothesis]:
+        with self._get_connection() as conn:
+            if target_cycle_id is not None:
+                query = """
+                    SELECT * FROM growth_hypotheses
+                    WHERE status = 'ACTIVE'
+                      AND tested_variable = ?
+                      AND (target_cycle_id = ? OR target_cycle_id IS NULL)
+                    ORDER BY id DESC LIMIT 1
+                """
+                params = (tested_variable.value, target_cycle_id)
+            else:
+                query = """
+                    SELECT * FROM growth_hypotheses
+                    WHERE status = 'ACTIVE'
+                      AND tested_variable = ?
+                    ORDER BY id DESC LIMIT 1
+                """
+                params = (tested_variable.value,)
+
+            cursor = conn.execute(query, params)
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return self._row_to_hypothesis(row)
+
     def update_hypothesis_status(
         self,
         hypothesis_id: int,
-        status: HypothesisStatus,
+        status: Union[HypothesisStatus, str],
         target_cycle_id: Optional[str] = None,
         promoted_decision_id: Optional[int] = None,
     ) -> GrowthHypothesis:
+        status_val = status.value if isinstance(status, HypothesisStatus) else str(status)
         with self._get_connection() as conn:
             cursor = conn.cursor()
             updates = ["status = ?"]
-            params = [status.value]
+            params = [status_val]
             if target_cycle_id is not None:
                 updates.append("target_cycle_id = ?")
                 params.append(target_cycle_id)
@@ -329,6 +436,23 @@ class SQLiteGrowthRepository(GrowthRepositoryPort):
         if not hypo:
             raise ValueError(f"Hipótese {hypothesis_id} não encontrada após atualização.")
         return hypo
+
+    # =========================================================================
+    # MAPEADORES DE LINHA SQLITE PARA ENTIDADES
+    # =========================================================================
+
+    def _row_to_funnel_audit(self, row: sqlite3.Row) -> FunnelOpportunityAudit:
+        return FunnelOpportunityAudit(
+            source_cycle_id=row["source_cycle_id"],
+            primary_bottleneck=FunnelStage(row["primary_bottleneck"]),
+            intention_opportunity_reais=Decimal(row["intention_opportunity_reais"]),
+            conversion_opportunity_reais=Decimal(row["conversion_opportunity_reais"]),
+            total_opportunity_reais=Decimal(row["total_opportunity_reais"]),
+            diagnosis_summary=row["diagnosis_summary"],
+            calculation_version=row["calculation_version"],
+            leads_opportunity_reais=Decimal(row["leads_opportunity_reais"]) if row["leads_opportunity_reais"] else None,
+            closing_opportunity_reais=Decimal(row["closing_opportunity_reais"]) if row["closing_opportunity_reais"] else None,
+        )
 
     def _row_to_hypothesis(self, row: sqlite3.Row) -> GrowthHypothesis:
         return GrowthHypothesis(

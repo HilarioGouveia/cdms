@@ -1,0 +1,54 @@
+{
+  "themeName": "Decision Cockpit",
+  "version": "1.0.0",
+  "palette": {
+    "background": {
+      "obsidian": "#0B0F17",
+      "surface": "#161F30",
+      "surfaceHover": "#1E293B",
+      "surfaceElevated": "#243248"
+    },
+    "brand": {
+      "cdmsCobalt": "#3B82F6",
+      "cgsEmerald": "#10B981",
+      "cgsMintGlow": "rgba(16, 185, 129, 0.15)"
+    },
+    "status": {
+      "criticalCoral": "#EF4444",
+      "criticalCoralGlow": "rgba(239, 68, 68, 0.18)",
+      "warningAmber": "#F59E0B",
+      "warningAmberGlow": "rgba(245, 158, 11, 0.15)",
+      "infoSky": "#0EA5E9",
+      "neutralSlate": "#64748B"
+    },
+    "text": {
+      "primary": "#F1F5F9",
+      "secondary": "#94A3B8",
+      "muted": "#64748B",
+      "inverse": "#0B0F17"
+    },
+    "border": {
+      "subtle": "rgba(255, 255, 255, 0.08)",
+      "focused": "#3B82F6",
+      "activeGreen": "#10B981"
+    }
+  },
+  "typography": {
+    "fontFamilySans": "'Inter', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif",
+    "fontFamilyMono": "'JetBrains Mono', 'IBM Plex Mono', monospace",
+    "kpiHeroSize": "2.25rem",
+    "headingSize": "1.25rem",
+    "bodySize": "0.925rem"
+  },
+  "radii": {
+    "sm": "6px",
+    "md": "10px",
+    "lg": "14px",
+    "pill": "9999px"
+  },
+  "shadows": {
+    "card": "0 4px 20px -2px rgba(0, 0, 0, 0.5)",
+    "glowEmerald": "0 0 15px rgba(16, 185, 129, 0.25)",
+    "glowCoral": "0 0 15px rgba(239, 68, 68, 0.25)"
+  }
+}
