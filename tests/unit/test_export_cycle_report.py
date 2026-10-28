@@ -90,9 +90,11 @@ def test_export_report_with_complete_audit_and_roi_delta():
     assert result.has_funnel_audit is True
     assert result.hypotheses_count == 1
     assert "# 📊 Relatório Executivo Semanal — Ciclo `2026-10-26`" in result.markdown_content
+    assert "\n\n## 1." in result.markdown_content
+    assert "\\n" not in result.markdown_content
     assert "INTENTION" in result.markdown_content
     assert "R$ 2,000.00" in result.markdown_content
-    assert "ROI de Governança Positivo: Redução de **R$ 2,500.00**" in result.markdown_content
+    assert "**ROI de Governança Positivo:** Redução de **R$ 2,500.00**" in result.markdown_content
     assert "| #42 | 🔵 ACTIVE | `CTA` | `ctr_pct` |" in result.markdown_content
     assert "#10" in result.markdown_content
 
