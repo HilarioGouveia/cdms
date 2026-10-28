@@ -70,7 +70,7 @@ class BaselineDriftDetector:
             if is_persistently_above and observed_values:
                 avg_high = sum(observed_values) / len(observed_values)
                 calib = getattr(ref_snap, "calibration", None)
-                current_p90 = float(calib.p90_reference) if calib else 0.0
+                current_p90 = float(calib.healthy_max) if calib else 0.0
                 name_str = getattr(ref_snap.definition, "name", m_key_str)
 
                 alerts.append(

@@ -179,7 +179,11 @@ def test_lead_funnel_two_step_audit_and_history(temp_repo):
     assert history[1].source_cycle_id == "2026-W43"
 
 
-def test_prepare_proposal_and_bidirectional_cdms_sync(temp_repo):
+@pytest.mark.parametrize("outcome, expected_status", [
+    ("ACHIEVED", "COMPLETED"), ("PARTIAL", "COMPLETED"),
+    ("NOT_ACHIEVED", "DISCARDED"), ("INCONCLUSIVE", "ACTIVE"),
+])
+def test_prepare_proposal_and_bidirectional_cdms_sync(temp_repo, outcome, expected_status):
     """Valida a injeção do ID da decisão CDMS e o fechamento do loop com sincronização de veredito."""
     hypo_uc = ManageHypothesesUseCase(temp_repo)
     prop_uc = PrepareCDMSProposalUseCase(growth_repository=temp_repo)
@@ -205,24 +209,138 @@ def test_prepare_proposal_and_bidirectional_cdms_sync(temp_repo):
     proposal = prop_uc.execute(
         hypothesis_id=h.id,
         target_cycle_start=date(2026, 10, 26),
-        auto_activate=True,
     )
-    assert proposal.promoted_decision_id is not None
-    assert proposal.promoted_decision_id > 0
+    assert proposal.target_cycle_id == "2026-10-26"
+    assert "\n" in proposal.formal_hypothesis
+    assert "\\n" not in proposal.formal_hypothesis
+    assert temp_repo.get_hypothesis_by_id(h.id).status == HypothesisStatus.PENDING
 
-    # Verifica se o CGS vinculou o promoted_decision_id e ativou a hipótese
+    # A decisão canônica é criada apenas ao fechar o ritual, na mesma transação do vínculo.
+    from pathlib import Path
+    from cdms.config.container import Container
+    from cdms.adapters.ui.components.metric_inputs import CANONICAL_DEFINITIONS, DEFAULT_CALIBRATIONS
+    from cdms.domain.entities.metric import MetricSnapshot
+    from cdms.domain.entities.learning import HypothesisOutcome
+    cdms = Container(db_path=Path(temp_repo._db_path))
+    snapshots = [MetricSnapshot(d, DEFAULT_CALIBRATIONS[d.key], 20.0) for d in CANONICAL_DEFINITIONS]
+    record = cdms.run_weekly_ritual_use_case.execute(
+        week_start=date(2026, 10, 26), snapshots=snapshots,
+        decision_summary=h.action_description, decision_hypothesis=h.expected_impact_description,
+        decision_success_criterion="Fechamento >= 14%", decision_evaluation_due_date=date(2026, 11, 2),
+        source_hypothesis_id=h.id,
+    )
     reloaded_hypo = temp_repo.get_hypothesis_by_id(h.id)
     assert reloaded_hypo.status == HypothesisStatus.ACTIVE
-    assert reloaded_hypo.promoted_decision_id == proposal.promoted_decision_id
+    assert reloaded_hypo.promoted_decision_id == record.decision.id
+    assert cdms.repository.get_ritual_by_cycle("2026-10-26").decision.source_hypothesis_id == h.id
 
-    # 3. Simula auditoria do ritual CDMS: Decisão atinge o objetivo (ACHIEVED)
-    updated_hypo = sync_uc.execute(
-        decision_id=proposal.promoted_decision_id,
-        verdict=CDMSDecisionVerdict.ACHIEVED.value,
+    cdms.run_weekly_ritual_use_case.execute(
+        week_start=date(2026, 11, 2), snapshots=snapshots,
+        decision_summary="Próximo teste", decision_hypothesis="Novo ângulo aumenta alcance",
+        decision_success_criterion="Alcance >= 1500", decision_evaluation_due_date=date(2026, 11, 9),
+        target_decision_id=record.decision.id, learning_outcome=HypothesisOutcome(outcome),
+        learning_evidence_notes="Fechamento observado de 15%", evaluation_as_of=date(2026, 11, 2),
     )
-    assert updated_hypo is not None
-    assert updated_hypo.status == HypothesisStatus.COMPLETED
+    assert temp_repo.get_hypothesis_by_id(h.id).status == HypothesisStatus(expected_status)
 
-    # 4. Confirmação na persistência
-    persisted_hypo = temp_repo.get_hypothesis_by_id(h.id)
-    assert persisted_hypo.status == HypothesisStatus.COMPLETED
+
+def test_failed_ritual_rolls_back_hypothesis_activation(temp_repo):
+    import sqlite3
+    from pathlib import Path
+    from cdms.config.container import Container
+    from cdms.adapters.ui.components.metric_inputs import CANONICAL_DEFINITIONS, DEFAULT_CALIBRATIONS
+    from cdms.domain.entities.metric import MetricSnapshot
+
+    cdms = Container(db_path=Path(temp_repo._db_path))
+    h = ManageHypothesesUseCase(temp_repo).create_hypothesis(
+        action_description="Testar CTA", tested_variable=VariableType.CTA,
+        target_metric_key="ctr_pct", target_metric_unit="%",
+        metric_direction=MetricDirection.HIGHER_IS_BETTER,
+        baseline_reference_value=Decimal("3"), success_metric_target=Decimal("5"),
+        invalidation_floor=Decimal("2"), expected_impact_description="Aumentar cliques",
+        impact_score=8, confidence_score=8, ease_score=8,
+    )
+    PrepareCDMSProposalUseCase(temp_repo).execute(h.id, date(2026, 10, 26))
+    with temp_repo._get_connection() as conn:
+        conn.execute("""CREATE TRIGGER reject_snapshot BEFORE INSERT ON metric_snapshots
+                        BEGIN SELECT RAISE(ABORT, 'simulated persistence failure'); END""")
+    snapshots = [MetricSnapshot(d, DEFAULT_CALIBRATIONS[d.key], 20.0) for d in CANONICAL_DEFINITIONS]
+    with pytest.raises(sqlite3.IntegrityError, match="simulated persistence failure"):
+        cdms.run_weekly_ritual_use_case.execute(
+            week_start=date(2026, 10, 26), snapshots=snapshots,
+            decision_summary="Testar CTA", decision_hypothesis="Aumentar cliques",
+            decision_success_criterion="CTR >= 5%", decision_evaluation_due_date=date(2026, 11, 2),
+            source_hypothesis_id=h.id,
+        )
+    assert cdms.repository.get_ritual_by_cycle("2026-10-26") is None
+    pending = temp_repo.get_hypothesis_by_id(h.id)
+    assert pending.status == HypothesisStatus.PENDING
+    assert pending.promoted_decision_id is None
+    with temp_repo._get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM decisions").fetchone()[0] == 0
+
+
+def test_proposal_requires_monday_and_preserves_canonical_decisions_schema(temp_repo):
+    from pathlib import Path
+    from cdms.adapters.persistence.sqlite_repo import SQLiteRepository
+    cdms = SQLiteRepository(Path(temp_repo._db_path))
+    with pytest.raises(ValueError, match="segunda-feira"):
+        PrepareCDMSProposalUseCase(temp_repo).execute(1, date(2026, 10, 28))
+    with temp_repo._get_connection() as conn:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(decisions)")}
+        assert {"ritual_id", "summary", "success_criterion", "cgs_hypothesis_id"} <= columns
+        assert conn.execute("SELECT COUNT(*) FROM decisions").fetchone()[0] == 0
+
+
+def test_existing_cdms_database_is_upgraded_without_losing_rituals(tmp_path):
+    from cdms.adapters.persistence.sqlite_repo import SQLiteRepository
+    from cdms.config.container import Container
+    from cdms.adapters.ui.components.metric_inputs import CANONICAL_DEFINITIONS, DEFAULT_CALIBRATIONS
+    from cdms.domain.entities.metric import MetricSnapshot
+    db_path = tmp_path / "existing.db"
+    container = Container(db_path=db_path)
+    record = container.run_weekly_ritual_use_case.execute(
+        week_start=date(2026, 10, 26),
+        snapshots=[MetricSnapshot(d, DEFAULT_CALIBRATIONS[d.key], 20.0) for d in CANONICAL_DEFINITIONS],
+        decision_summary="Decisão existente", decision_hypothesis="Hipótese existente",
+        decision_success_criterion="CTR >= 5%", decision_evaluation_due_date=date(2026, 11, 2),
+    )
+    with container.repository._connection() as conn:
+        conn.execute("ALTER TABLE decisions DROP COLUMN cgs_hypothesis_id")
+        conn.commit()
+    migrated = SQLiteRepository(db_path)
+    loaded = migrated.get_ritual_by_cycle(record.cycle_id)
+    assert loaded.decision.summary == "Decisão existente"
+    assert loaded.decision.source_hypothesis_id is None
+    assert SQLiteRepository(db_path).get_ritual_by_cycle(record.cycle_id).id == record.id
+
+
+def test_variable_conflict_at_commit_does_not_leave_partial_ritual(temp_repo):
+    from pathlib import Path
+    from cdms.config.container import Container
+    from cdms.adapters.ui.components.metric_inputs import CANONICAL_DEFINITIONS, DEFAULT_CALIBRATIONS
+    from cdms.domain.entities.metric import MetricSnapshot
+    cdms = Container(db_path=Path(temp_repo._db_path))
+    manager = ManageHypothesesUseCase(temp_repo)
+    kwargs = dict(
+        action_description="Testar CTA", tested_variable=VariableType.CTA,
+        target_metric_key="ctr_pct", target_metric_unit="%", metric_direction=MetricDirection.HIGHER_IS_BETTER,
+        baseline_reference_value=Decimal("3"), success_metric_target=Decimal("5"),
+        invalidation_floor=Decimal("2"), expected_impact_description="Aumentar cliques",
+        impact_score=8, confidence_score=8, ease_score=8,
+    )
+    candidate = manager.create_hypothesis(**kwargs)
+    competitor = manager.create_hypothesis(**kwargs)
+    PrepareCDMSProposalUseCase(temp_repo).execute(candidate.id, date(2026, 10, 26))
+    manager.activate_hypothesis(competitor.id, target_cycle_id="2026-10-26")
+    with pytest.raises(ValueError, match="hipótese ativa"):
+        cdms.run_weekly_ritual_use_case.execute(
+            week_start=date(2026, 10, 26),
+            snapshots=[MetricSnapshot(d, DEFAULT_CALIBRATIONS[d.key], 20.0) for d in CANONICAL_DEFINITIONS],
+            decision_summary="Testar CTA", decision_hypothesis="Aumentar cliques",
+            decision_success_criterion="CTR >= 5%", decision_evaluation_due_date=date(2026, 11, 2),
+            source_hypothesis_id=candidate.id,
+        )
+    assert not cdms.repository.list_rituals()
+    assert temp_repo.get_hypothesis_by_id(candidate.id).status == HypothesisStatus.PENDING
+    assert temp_repo.get_hypothesis_by_id(competitor.id).status == HypothesisStatus.ACTIVE

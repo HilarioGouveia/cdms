@@ -5,6 +5,8 @@ from decimal import Decimal
 import streamlit as st
 
 from cgs.adapters.persistence.sqlite_growth_repo import SQLiteGrowthRepository
+from cdms.adapters.persistence.sqlite_repo import SQLiteRepository
+from pathlib import Path
 from cgs.application.use_cases.audit_funnel_opportunity import AuditFunnelOpportunityUseCase
 from cgs.application.use_cases.export_cycle_report import ExportCycleReportUseCase
 from cgs.application.use_cases.manage_hypotheses import ManageHypothesesUseCase
@@ -26,7 +28,7 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
     audit_uc = AuditFunnelOpportunityUseCase(repo)
     hypo_uc = ManageHypothesesUseCase(repo)
     prop_uc = PrepareCDMSProposalUseCase(growth_repository=repo)
-    export_uc = ExportCycleReportUseCase(growth_repository=repo)
+    export_uc = ExportCycleReportUseCase(growth_repository=repo, cdms_repository=SQLiteRepository(Path(db_path)))
 
     tabs = st.tabs([
         "📊 Diagnóstico de Funil",
@@ -54,7 +56,7 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
             )
 
             col1, col2, col3 = st.columns(3)
-            source_cycle = col1.date_input("Segunda-feira de Referência", value=date.today() - timedelta(days=7))
+            source_cycle = col1.date_input("Segunda-feira de Referência", value=date.today() - timedelta(days=date.today().weekday() + 7))
             impressions = col2.number_input("Impressões Totais", min_value=0, value=10000, step=500)
             clicks = col3.number_input("Cliques Registados", min_value=0, value=300, step=50)
 
@@ -68,6 +70,8 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
 
             if st.button("Executar Diagnóstico Financeiro", type="primary"):
                 try:
+                    if source_cycle.weekday() != 0:
+                        raise ValueError("O ciclo deve começar numa segunda-feira.")
                     audit = audit_uc.execute(
                         source_cycle_id=source_cycle.isoformat(),
                         impressions=impressions,
@@ -148,7 +152,7 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
                     "Oportunidade Total": f"R$ {a.total_opportunity_reais:,.2f}",
                     "Resumo Diagnóstico": a.diagnosis_summary,
                 })
-            st.dataframe(table_rows, use_container_width=True, hide_index=True)
+            st.dataframe(table_rows, width="stretch", hide_index=True)
 
     # =========================================================================
     # ABA 2: Backlog de Hipóteses e Ciclo de Vida
@@ -197,6 +201,11 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
 
         st.divider()
 
+        target_cycle = st.date_input(
+            "Ciclo alvo da proposta CDMS",
+            value=date.today() - timedelta(days=date.today().weekday()),
+            key="proposal_cycle",
+        )
         sub_pend, sub_act, sub_hist = st.tabs(["⏳ Pendentes (Ranking ICE)", "🔬 Em Teste (ACTIVE)", "📜 Histórico"])
 
         with sub_pend:
@@ -208,20 +217,20 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
                 for h in backlog:
                     with st.expander(f"⭐ ICE: {h.ice_score} | [{h.tested_variable.value}] {h.action_description}"):
                         st.write(f"**Meta:** {h.target_metric_key} para {h.success_metric_target}{h.target_metric_unit} (Piso: {h.invalidation_floor}{h.target_metric_unit})")
+                        if h.target_cycle_id:
+                            st.info(f"Proposta preparada para `{h.target_cycle_id}`. Conclua o ritual no CDMS para ativá-la.")
                         st.write(f"**Parâmetros ICE:** Impacto: {h.impact_score} | Confiança: {h.confidence_score} | Facilidade: {h.ease_score}")
 
                         c_act, c_disc = st.columns([3, 1])
                         if c_act.button(f"Preparar para Ritual CDMS #{h.id}", key=f"btn_prop_{h.id}"):
-                            current_cycle_date = date.today()
                             try:
                                 proposal = prop_uc.execute(
                                     hypothesis_id=h.id,
-                                    target_cycle_start=current_cycle_date,
-                                    auto_activate=True,
+                                    target_cycle_start=target_cycle,
                                 )
                                 st.success(
-                                    f"✅ Decisão CDMS #{proposal.promoted_decision_id} vinculada com sucesso! "
-                                    f"Hipótese #{h.id} promovida para ACTIVE no ciclo `{proposal.target_cycle_id}`."
+                                    f"Proposta #{h.id} preparada para o ciclo `{proposal.target_cycle_id}`. "
+                                    "Selecione-a no CDMS e conclua o ritual para iniciar o teste."
                                 )
                                 st.code(proposal.formal_hypothesis, language="markdown")
                                 st.rerun()
@@ -248,6 +257,8 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
                         st.write(f"**Meta Esperada:** {h.target_metric_key} ≥ {h.success_metric_target}{h.target_metric_unit}")
                         st.write(f"**Piso de Invalidação:** {h.invalidation_floor}{h.target_metric_unit}")
 
+                        if h.promoted_decision_id:
+                            st.caption("O resultado deste teste será auditado no próximo ritual CDMS.")
                         col_comp, col_disc = st.columns(2)
                         if col_comp.button("Concluir Teste (COMPLETED)", key=f"btn_comp_{h.id}", type="primary"):
                             hypo_uc.complete_hypothesis(h.id)
@@ -371,7 +382,7 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
 
         all_audits = repo.list_funnel_audits(limit=50)
         available_cycles = [a.source_cycle_id for a in all_audits]
-        today_iso = date.today().isoformat()
+        today_iso = (date.today() - timedelta(days=date.today().weekday())).isoformat()
         if today_iso not in available_cycles:
             available_cycles.insert(0, today_iso)
 
@@ -395,7 +406,7 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db"):
             file_name=f"relatorio_ciclo_{selected_cycle}.md",
             mime="text/markdown",
             type="primary",
-            use_container_width=True,
+            width="stretch",
         )
 
         with st.expander("👁️ Pré-visualização do Relatório Markdown", expanded=True):

@@ -12,3 +12,4 @@ class Decision:
     evaluation_due_date: date
     owner: str = "Creator"
     recorded_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    source_hypothesis_id: Optional[int] = None

@@ -96,7 +96,7 @@ class ExportCycleReportUseCase:
             f"# 📊 Relatório Executivo Semanal — Ciclo `{cycle_id}`",
             "",
             f"> **Gerado em:** {generated_at}  ",
-            f"> **Status da Governança:** Concluído e Auditado (CDMS & CGS)",
+            f"> **Status da Governança:** {'Ritual concluído' if cdms_ritual else 'Ritual pendente'}",
             "",
             "---",
             "",

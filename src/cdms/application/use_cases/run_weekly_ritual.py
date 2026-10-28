@@ -171,6 +171,7 @@ class RunWeeklyRitualUseCase:
         learning_outcome: Optional[HypothesisOutcome] = None,
         learning_evidence_notes: Optional[str] = None,
         evaluation_as_of: Optional[date] = None,
+        source_hypothesis_id: Optional[int] = None,
     ) -> WeeklyRitualRecord:
         # 1. Validação temporal invariante
         self._validate_cycle_date(week_start)
@@ -179,6 +180,8 @@ class RunWeeklyRitualUseCase:
         # 2. Verificação de idempotência / ciclo já encerrado
         existing_ritual = self.repo.get_ritual_by_cycle(cycle_id)
         if existing_ritual:
+            if existing_ritual.decision.source_hypothesis_id != source_hypothesis_id:
+                raise CycleAlreadyClosedError(f"O ciclo {cycle_id} já possui outra decisão vinculada.")
             if self._is_equivalent_payload(
                 existing=existing_ritual,
                 snapshots=snapshots,
@@ -218,6 +221,7 @@ class RunWeeklyRitualUseCase:
             success_criterion=decision_success_criterion.strip(),
             evaluation_due_date=decision_evaluation_due_date,
             owner=decision_owner.strip(),
+            source_hypothesis_id=source_hypothesis_id,
         )
 
         # 6. Agregador com carimbo de versão de regras
