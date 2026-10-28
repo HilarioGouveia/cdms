@@ -46,11 +46,6 @@ def run_app(*, embedded=False, section="ritual"):
     settings = container.settings
     growth_repo = SQLiteGrowthRepository(str(settings.DB_PATH))
 
-    st.title("🎯 Creator Data Marketing System (CDMS)")
-    st.caption(
-        f"Governança de Decisão e Diagnóstico Heurístico | Regras v{settings.RULES_VERSION}"
-    )
-
     # Persistência de Calibrações na Sessão
     if (
         "active_calibs" not in st.session_state

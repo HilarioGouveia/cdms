@@ -23,9 +23,6 @@ from cgs.domain.entities.hypothesis import (
 def render_growth_engine(db_path: str = "data/cdms_dev.db", *, section="diagnosis"):
     if section not in {"diagnosis", "backlog", "baseline", "report"}:
         raise ValueError("Seção de experimentos desconhecida.")
-    st.title("🚀 Creator Growth System (CGS)")
-    st.caption("Motor de Experimentação Operacional, Diagnóstico de Funil e Ranking ICE")
-
     repo = SQLiteGrowthRepository(db_path)
     audit_uc = AuditFunnelOpportunityUseCase(repo)
     hypo_uc = ManageHypothesesUseCase(repo)

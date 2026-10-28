@@ -65,7 +65,8 @@ def test_navigation_and_calibrated_ritual(ui, conversion_type):
     assert container_module.get_container().repository.list_rituals(limit=10)
     at.button(key="studio_nav_Experimentos").click().run()
     assert_healthy(at)
-    assert "Creator Growth System" in at.title[0].value
+    assert not at.title
+    assert any("Experimentos / Diagnóstico do funil" in item.value for item in at.markdown)
     open_page(at, "baseline")
     widget(at.selectbox, "Tipo de Conversão Comercial").set_value(conversion_type).run()
     assert_healthy(at)

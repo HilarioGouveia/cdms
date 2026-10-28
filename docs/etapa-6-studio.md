@@ -64,6 +64,10 @@ O explorador apresenta apenas as quatro seções do módulo ativo. O centro rend
 somente a seção selecionada, sem as antigas abas de navegação entre páginas.
 As abas de status das hipóteses continuam dentro do backlog.
 
+O cabeçalho central contém o caminho da seção e uma descrição breve da tarefa.
+Os títulos institucionais repetidos de CDMS/CGS foram removidos: a marca fica na
+barra superior e a versão das regras na barra de status.
+
 Cada módulo lembra a última seção aberta. Os atalhos do Cockpit abrem diretamente
 o ritual ou o diagnóstico, mesmo quando outra seção foi usada anteriormente.
 Campos do ritual, métricas, calibrações, hipótese, diagnóstico e baseline possuem

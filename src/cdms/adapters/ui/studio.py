@@ -34,6 +34,17 @@ PAGES = {
     },
 }
 
+PAGE_DESCRIPTIONS = {
+    "ritual": "Uma decisão prioritária, com hipótese, critério e prazo.",
+    "history": "Acompanhe a evolução das métricas e os aprendizados de cada ciclo.",
+    "export": "Exporte o registro da decisão e suas evidências.",
+    "calibration": "Defina as faixas de referência para classificar as métricas.",
+    "diagnosis": "Identifique o gargalo do funil e estime a oportunidade recuperável.",
+    "backlog": "Priorize hipóteses e acompanhe os experimentos por variável.",
+    "baseline": "Defina as referências comerciais para o diagnóstico do funil.",
+    "report": "Consolide diagnósticos, experimentos e decisões do ciclo.",
+}
+
 
 def navigate(section, page=None):
     st.session_state.studio_section = section
@@ -176,7 +187,8 @@ def run_studio():
         section = st.session_state.studio_section
         if section in PAGES:
             page = st.session_state[f"studio_page_{section}"]
-            st.caption(f"{section} / {PAGES[section][page][0]}")
+            st.markdown(f"**{section} / {PAGES[section][page][0]}**")
+            st.caption(PAGE_DESCRIPTIONS[page])
         if section == "Cockpit":
             render_cockpit(core, growth, cycle.isoformat())
         elif section == "Governança":
