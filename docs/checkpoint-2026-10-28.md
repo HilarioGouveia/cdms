@@ -39,7 +39,7 @@ Comandos usados no ambiente virtual local:
 
 ## Arquivos locais preservados fora do Git
 
-O arquivo `CDMS.zip` contém fontes duplicados, banco local e caches. Ele permanece no disco, ignorado pelo Git. Bancos em `data/`, ambiente virtual, caches e credenciais locais também permanecem fora do versionamento conforme `.gitignore`.
+O arquivo `CDMS.zip` contém fontes duplicados, banco local e caches. Ele foi excluído do versionamento por uma regra de ignore. Estava presente na inspeção inicial, mas não foi encontrado na conferência final; as ações desta consolidação não incluíram sua remoção. Bancos em `data/`, ambiente virtual, caches e credenciais locais também permanecem fora do versionamento conforme `.gitignore`.
 
 ## Próxima etapa
 
