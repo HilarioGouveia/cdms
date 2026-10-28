@@ -1,9 +1,7 @@
 """Fixtures globais e configuração de ambiente de testes."""
 
-import gc
 import os
 import tempfile
-import time
 from typing import Generator
 import pytest
 
@@ -40,16 +38,7 @@ def temp_growth_repo() -> Generator[SQLiteGrowthRepository, None, None]:
     os.close(fd)
     repo = SQLiteGrowthRepository(path)
 
-    yield repo
-
-    del repo
-    gc.collect()
-
-    for _ in range(6):
-        try:
-            if os.path.exists(path):
-                os.remove(path)
-            break
-        except PermissionError:
-            time.sleep(0.05)
-            gc.collect()
+    try:
+        yield repo
+    finally:
+        os.remove(path)

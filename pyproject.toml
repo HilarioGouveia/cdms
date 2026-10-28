@@ -19,13 +19,30 @@ classifiers = [
     "Topic :: Office/Business :: Financial :: Spreadsheet",
 ]
 
-# Dependências estritas da Fase 1 (MVP Local) conforme SDD v2.3.1
+# Dependências da interface local
 # sqlite3 faz parte da biblioteca padrão do Python
 dependencies = [
     "streamlit>=1.35.0",
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.2",
+    "plotly>=5.0.0",
+    "tzdata>=2024.1; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]
+api = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.28.0",
+    "pyjwt>=2.8.0",
+    "passlib[bcrypt]>=1.7.4,<1.8",
+    # Passlib 1.7.4 requer a API legada de bcrypt.
+    "bcrypt>=3.2.0,<4.1",
+    "pydantic[email]>=2.6.0",
+]
+automation = [
+    "celery>=5.3.6",
+    "redis>=5.0.3",
+]
 dev = [
     "pytest>=8.0.0",
 ]
@@ -33,10 +50,3 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["cdms*", "cgs*"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short"

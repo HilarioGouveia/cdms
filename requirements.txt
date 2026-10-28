@@ -1,3 +1,2 @@
-streamlit>=1.30.0
-pytest>=8.0.0
-openpyxl>=3.1.2
+# Instala a suite completa a partir do manifesto central.
+-e .[dev,api,automation]

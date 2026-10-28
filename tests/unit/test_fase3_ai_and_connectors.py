@@ -3,7 +3,7 @@
 from decimal import Decimal
 import pytest
 from cdms.adapters.connectors.mock_connectors import MockMetaAdsConnector, MockYouTubeStudioConnector
-from cdms.domain.entities.funnel import FunnelOpportunityAudit, FunnelStage
+from cgs.domain.entities.funnel import FunnelOpportunityAudit, FunnelStage
 from cdms.domain.entities.health_index import HealthTier
 from cdms.domain.services.ai_hypothesis_generator import AIHypothesisGenerator
 
@@ -29,7 +29,6 @@ def test_youtube_studio_connector():
 
 def test_ai_hypothesis_generation_for_intention_bottleneck():
     audit = FunnelOpportunityAudit(
-        id=1,
         source_cycle_id="2026-10-26",
         primary_bottleneck=FunnelStage.INTENTION,
         intention_opportunity_reais=Decimal("3500.00"),
@@ -47,7 +46,6 @@ def test_ai_hypothesis_generation_for_intention_bottleneck():
 
 def test_ai_hypothesis_generation_for_conversion_bottleneck():
     audit = FunnelOpportunityAudit(
-        id=2,
         source_cycle_id="2026-10-26",
         primary_bottleneck=FunnelStage.CONVERSION,
         intention_opportunity_reais=Decimal("400.00"),

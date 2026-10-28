@@ -187,19 +187,21 @@ python -m pip install --upgrade pip
 ### 3. Instalar o Projeto em Modo Editável e Dependências
 
 ```bash
-# Instalação básica do projeto
-pip install -e ".[dev]"
+# Instalação completa para desenvolvimento e testes
+pip install -e ".[dev,api,automation]"
 
-# Dependências da Fase 2 (API REST & JWT)
-pip install "fastapi>=0.110.0" "uvicorn>=0.28.0" "pyjwt>=2.8.0" "passlib[bcrypt]>=1.7.4" "pydantic[email]>=2.6.0"
+# Alternativa equivalente para instalar a suíte completa
+pip install -r requirements.txt
 
-# Dependências da Fase 3 (Celery & Redis)
-pip install "celery>=5.3.6" "redis>=5.0.3"
+# Instalações parciais: interface e testes, API ou automação
+# pip install -e ".[dev]"
+# pip install -e ".[api]"
+# pip install -e ".[automation]"
 ```
 
 ### 4. Executar os Testes Automatizados
 
-A suíte completa cobre 100% dos fluxos de todas as fases:
+Execute a suíte automatizada com os extras `dev`, `api` e `automation` instalados. Os testes usam bancos temporários e conectores simulados; não comprovam integração real com plataformas externas:
 
 ```bash
 pytest -v

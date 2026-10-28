@@ -1,6 +1,8 @@
 """Implementação SQLite do repositório da Fase 2 do CGS."""
 
 import sqlite3
+from contextlib import contextmanager
+from typing import Iterator
 from typing import List, Optional
 from cgs.application.ports.cgs_fase2_repository import CGSPhase2RepositoryPort
 from cgs.domain.entities.budget_allocation import BudgetAllocation, ExperimentRiskTier
@@ -13,11 +15,17 @@ class SQLiteCGSPhase2Repository(CGSPhase2RepositoryPort):
         self.db_path = db_path
         self._init_schema()
 
-    def _get_connection(self) -> sqlite3.Connection:
+    @contextmanager
+    def _get_connection(self) -> Iterator[sqlite3.Connection]:
+        """Finaliza a transação e fecha a conexão mesmo quando a operação falha."""
         conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON;")
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON;")
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _init_schema(self) -> None:
         with self._get_connection() as conn:
