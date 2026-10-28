@@ -55,6 +55,9 @@ class SQLiteRepository(RepositoryPort):
 
         with self._connection() as conn:
             conn.executescript(ddl)
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(decisions)")}
+            if "cgs_hypothesis_id" not in columns:
+                conn.execute("ALTER TABLE decisions ADD COLUMN cgs_hypothesis_id INTEGER")
             cursor = conn.cursor()
             cursor.execute("SELECT version FROM schema_migrations WHERE version = 1")
             if not cursor.fetchone():
@@ -102,6 +105,7 @@ class SQLiteRepository(RepositoryPort):
         with self._connection() as conn:
             try:
                 cursor = conn.cursor()
+                cursor.execute("BEGIN IMMEDIATE")
 
                 # 1. Inserir ritual agregador
                 evidence_json = json.dumps(ritual.scenario.evidence_metric_keys)
@@ -129,8 +133,8 @@ class SQLiteRepository(RepositoryPort):
                 cursor.execute("""
                     INSERT INTO decisions (
                         ritual_id, cycle_id, summary, hypothesis, success_criterion,
-                        evaluation_due_date, owner, recorded_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        evaluation_due_date, owner, recorded_at, cgs_hypothesis_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     ritual_id,
                     ritual.decision.cycle_id,
@@ -139,9 +143,32 @@ class SQLiteRepository(RepositoryPort):
                     ritual.decision.success_criterion,
                     ritual.decision.evaluation_due_date.isoformat(),
                     ritual.decision.owner,
-                    ritual.decision.recorded_at.isoformat()
+                    ritual.decision.recorded_at.isoformat(),
+                    ritual.decision.source_hypothesis_id,
                 ))
                 ritual.decision.id = cursor.lastrowid
+
+                if ritual.decision.source_hypothesis_id is not None:
+                    hypothesis_id = ritual.decision.source_hypothesis_id
+                    conflict = conn.execute(
+                        """SELECT active.id FROM growth_hypotheses active
+                           JOIN growth_hypotheses candidate ON candidate.id = ?
+                           WHERE active.status = 'ACTIVE' AND active.id != candidate.id
+                             AND active.tested_variable = candidate.tested_variable
+                             AND (active.target_cycle_id = ? OR active.target_cycle_id IS NULL)
+                           LIMIT 1""", (hypothesis_id, ritual.cycle_id),
+                    ).fetchone()
+                    if conflict:
+                        raise ValueError("Já existe hipótese ativa para esta variável no ciclo.")
+                    cursor.execute(
+                        """UPDATE growth_hypotheses
+                           SET status = 'ACTIVE', target_cycle_id = ?, promoted_decision_id = ?
+                           WHERE id = ? AND status IN ('PENDING', 'BACKLOG')
+                             AND target_cycle_id = ? AND promoted_decision_id IS NULL""",
+                        (ritual.cycle_id, ritual.decision.id, hypothesis_id, ritual.cycle_id),
+                    )
+                    if cursor.rowcount != 1:
+                        raise ValueError("A proposta CGS não está pendente para este ciclo. Prepare-a novamente.")
 
                 # 3. Inserir snapshots de métricas
                 for s in ritual.snapshots:
@@ -179,6 +206,20 @@ class SQLiteRepository(RepositoryPort):
                         ritual.learning.recorded_at.isoformat()
                     ))
                     ritual.learning.id = cursor.lastrowid
+                    has_growth = conn.execute(
+                        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'growth_hypotheses'"
+                    ).fetchone()
+                    if has_growth:
+                        next_status = {
+                            "ACHIEVED": "COMPLETED", "PARTIAL": "COMPLETED",
+                            "NOT_ACHIEVED": "DISCARDED",
+                        }.get(ritual.learning.outcome.value)
+                        if next_status:
+                            cursor.execute(
+                                """UPDATE growth_hypotheses SET status = ?
+                                   WHERE promoted_decision_id = ? AND status = 'ACTIVE'""",
+                                (next_status, ritual.learning.target_decision_id),
+                            )
 
                 conn.commit()
                 return ritual
@@ -249,6 +290,7 @@ class SQLiteRepository(RepositoryPort):
             success_criterion=d_row["success_criterion"],
             evaluation_due_date=date.fromisoformat(d_row["evaluation_due_date"]),
             owner=d_row["owner"],
+            source_hypothesis_id=d_row["cgs_hypothesis_id"],
             recorded_at=datetime.fromisoformat(d_row["recorded_at"])
         )
 
@@ -315,6 +357,7 @@ class SQLiteRepository(RepositoryPort):
                 success_criterion=row["success_criterion"],
                 evaluation_due_date=date.fromisoformat(row["evaluation_due_date"]),
                 owner=row["owner"],
+                source_hypothesis_id=row["cgs_hypothesis_id"],
                 recorded_at=datetime.fromisoformat(row["recorded_at"])
             )
 

@@ -54,7 +54,7 @@ flowchart TD
         direction TB
         G1["<b>1. Auditoria de Funil (1 ou 2 Passos)</b><br/>Entrada de Impressões, Cliques, Leads e Vendas.<br/>Cálculo exato em Decimal e registro no Histórico Acumulado."]:::cgs
         G2["<b>2. Backlog Priorizado por ICE</b><br/>Cadastro de hipótese com variável única isolada.<br/>Ordenação estável por Impacto, Confiança e Facilidade."]:::cgs
-        G3["<b>3. Governança Causal & Proposta CDMS</b><br/>Validação de variável única ativa no ciclo.<br/>Injeção imediata de Decision no CDMS e transição para ACTIVE."]:::cgs
+        G3["<b>3. Governança Causal & Proposta CDMS</b><br/>Validação de variável única ativa no ciclo.<br/>Prepara proposta para segunda-feira; ativação somente ao concluir o ritual CDMS."]:::cgs
         G1 --> G2 --> G3
     end
 
@@ -67,8 +67,8 @@ flowchart TD
         R1 --> R2 --> R3 --> R4
     end
 
-    G3 -->|Injeta Decision vinculada / promoted_decision_id| R4
-    R4 -->|Commit Atômico do Ciclo| ClosedWeek[💾 Registro Semanal Concluído]:::link
+    G3 -->|Proposta pendente para o ciclo selecionado| R4
+    R4 -->|Commit atômico: ritual, decisão e ativação CGS| ClosedWeek[💾 Registro Semanal Concluído]:::link
     ClosedWeek -.->|source_cycle_id| G1
     R1 -.->|SyncCDMSOutcomeUseCase: Veredito| G2
 ```
@@ -247,3 +247,24 @@ Backup consistente com a aplicação fechada:
 ```bash
 sqlite3 data/cdms_dev.db ".backup 'data/backup_cdms_$(date +%Y%m%d).db'"
 ```
+
+
+## Validação da interface e fluxo integrado
+
+Os testes em `tests/ui/` executam o ponto de entrada `app.py` com `streamlit.testing.v1.AppTest`, datas fixas e banco SQLite temporário compartilhado entre CDMS e CGS. Não é necessário iniciar um servidor ou conectar contas de mídia.
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q tests/ui
+```
+
+Fluxo manual para uma hipótese CGS:
+
+1. No CGS, salve a baseline comercial e execute o diagnóstico para uma segunda-feira de referência.
+2. Cadastre a hipótese no backlog e escolha a segunda-feira em **Ciclo alvo da proposta CDMS**.
+3. Clique em **Preparar para Ritual CDMS**. A hipótese permanece pendente até o ritual ser concluído.
+4. No CDMS, escolha a mesma segunda-feira e selecione a hipótese em **Proposta CGS para este ciclo**.
+5. Confira as métricas e a decisão preenchida; conclua o ritual. A decisão e o vínculo CGS são gravados juntos, e a hipótese passa para `ACTIVE`.
+6. No ritual seguinte, após o prazo de avaliação, registre o resultado e as evidências da decisão anterior. `ACHIEVED` e `PARTIAL` concluem a hipótese; `NOT_ACHIEVED` a descarta. `INCONCLUSIVE` preserva o estado ativo.
+7. Consulte o histórico e a prévia do relatório no CGS.
+
+A validação automatizada cobre comportamento e persistência. Aparência visual no navegador, upload real de arquivos e integrações externas exigem verificações próprias.

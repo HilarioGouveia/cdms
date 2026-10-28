@@ -9,6 +9,8 @@ from cdms.application.use_cases.run_weekly_ritual import (
     InvalidCycleDateError,
 )
 from cdms.config.container import get_container
+from cgs.adapters.persistence.sqlite_growth_repo import SQLiteGrowthRepository
+from cgs.domain.entities.hypothesis import HypothesisStatus, MetricDirection
 from cdms.domain.entities.learning import HypothesisOutcome
 from cdms.domain.services.baseline_drift_detector import BaselineDriftDetector
 from cdms.adapters.parsers.platform_parser import PlatformMetricsParser
@@ -43,6 +45,7 @@ def run_app():
     container = get_container()
     repo = container.repository
     settings = container.settings
+    growth_repo = SQLiteGrowthRepository(str(settings.DB_PATH))
 
     st.title("🎯 Creator Data Marketing System (CDMS)")
     st.caption(
@@ -182,6 +185,32 @@ def run_app():
         st.markdown("---")
         st.subheader("4. Trava da Decisão Única da Semana")
         next_eval_date = week_start + timedelta(days=7)
+        proposals = {
+            h.id: h for h in growth_repo.list_hypotheses(status=HypothesisStatus.PENDING, limit=100)
+            if h.target_cycle_id == week_start.isoformat() and h.promoted_decision_id is None
+        }
+        proposal_id = st.selectbox(
+            "Proposta CGS para este ciclo", options=[None, *proposals],
+            format_func=lambda value: "Decisão manual" if value is None else f"#{value} — {proposals[value].action_description}",
+            key="ritual_proposal",
+        )
+        form_source = (week_start.isoformat(), proposal_id)
+        previous_source = st.session_state.get("_decision_form_source")
+        if previous_source != form_source:
+            if proposal_id is not None:
+                proposal = proposals[proposal_id]
+                comparison = "≥" if proposal.metric_direction == MetricDirection.HIGHER_IS_BETTER else "≤"
+                st.session_state["dec_summary"] = proposal.action_description
+                st.session_state["dec_hypothesis"] = proposal.expected_impact_description
+                st.session_state["dec_criterion"] = (
+                    f"{proposal.target_metric_key} {comparison} {proposal.success_metric_target}{proposal.target_metric_unit}; "
+                    f"limite de invalidação {proposal.invalidation_floor}{proposal.target_metric_unit}."
+                )
+                st.session_state["dec_due_date"] = week_start + timedelta(days=proposal.window_days)
+            elif previous_source is not None:
+                for key in ("dec_summary", "dec_hypothesis", "dec_criterion", "dec_due_date"):
+                    st.session_state.pop(key, None)
+            st.session_state["_decision_form_source"] = form_source
         dec_summary, dec_hypothesis, dec_criterion, dec_due_date, dec_owner = (
             render_decision_form(default_due_date=next_eval_date)
         )
@@ -206,6 +235,7 @@ def run_app():
                         learning_outcome=learning_outcome,
                         learning_evidence_notes=learning_notes,
                         evaluation_as_of=today,
+                        source_hypothesis_id=proposal_id,
                     )
                     st.success(
                         f"🎉 Ritual do ciclo {record.cycle_id} finalizado com sucesso! Cenário: {record.scenario.type.value}"

@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.abspath("src"))
 import streamlit as st
 from cdms.adapters.ui.streamlit_app import run_app as render_cdms
 from cgs.adapters.ui.growth_engine_page import render_growth_engine
+from cdms.config.settings import settings
 
 
 def main():
@@ -21,7 +22,7 @@ def main():
     if modulo == "🎯 CDMS (Governança e Ritual)":
         render_cdms()
     else:
-        render_growth_engine(db_path="data/cdms_dev.db")
+        render_growth_engine(db_path=str(settings.DB_PATH))
 
 
 if __name__ == "__main__":

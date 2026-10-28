@@ -105,6 +105,7 @@ def test_export_report_without_funnel_audit_handles_cleanly():
 
     result = use_case.execute("2026-11-02")
 
+    assert "Status da Governança:** Ritual pendente" in result.markdown_content
     assert result.has_funnel_audit is False
     assert result.hypotheses_count == 0
     assert "_Nenhuma auditoria quantitativa de funil foi registrada para este ciclo._" in result.markdown_content

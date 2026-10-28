@@ -28,7 +28,7 @@ def render_metric_trends(rituals: List, active_calibs: Dict):
 
     mapping = [
         ("reach", 0),
-        ("retention_pct", 1),
+        ("avg_retention_pct", 1),
         ("ctr_pct", 2),
         ("conversions", 3),
     ]
@@ -41,8 +41,8 @@ def render_metric_trends(rituals: List, active_calibs: Dict):
                 chart_df["Observado"] = df_hist[key_str]
 
                 if calib:
-                    chart_df["P10 (Mín. Saudável)"] = float(calib.p10_reference)
-                    chart_df["P90 (Máx. Saudável)"] = float(calib.p90_reference)
+                    chart_df["P10 (Mín. Saudável)"] = float(calib.healthy_min)
+                    chart_df["P90 (Máx. Saudável)"] = float(calib.healthy_max)
 
                 st.line_chart(
                     chart_df,
