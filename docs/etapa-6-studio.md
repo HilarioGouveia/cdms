@@ -81,3 +81,36 @@ CDMS/CGS, exportação sem dados, seções exclusivas, memória de navegação e
 de ritual, hipótese e baseline. O banco local manteve seu SHA-256. A revisão visual
 desta navegação não foi concluída: o navegador de verificação não conseguiu anexar
 uma aba nesta sessão; os testes de comportamento foram executados com AppTest.
+
+## Ritual guiado e mobile
+
+O ritual usa quatro etapas: Aprendizado, Métricas, Diagnóstico e Decisão.
+O módulo `src/cdms/adapters/ui/ritual_wizard.py` renderiza apenas a etapa aberta.
+No desktop, o seletor superior permite navegar diretamente; Anterior/Próxima
+orientam o percurso. No mobile, o seletor é ocultado e permanece o indicador
+"Etapa N de 4", com os botões abaixo do conteúdo e os campos em uma coluna.
+
+Até 900 px, os painéis laterais do ritual ficam recolhidos. Seções e evidências
+continuam acessíveis por popovers na barra superior; a dock permanece disponível.
+O ajuste é de apresentação: não modifica permissões nem dados.
+
+Rascunhos são separados por ciclo na sessão, incluindo etapa, métricas, aprendizado
+e decisão. Voltar para um ciclo recupera seu rascunho. Fechar/reiniciar a sessão
+não oferece persistência durável desses rascunhos. Diagnóstico e revisão final
+são recalculados usando os valores e calibrações atuais, sem gravar dados.
+
+Na etapa 4, a revisão reúne aprendizado, métricas e diagnóstico. Somente o botão
+"Concluir ritual" executa o caso de uso transacional existente. A conclusão exige
+que as métricas tenham sido preenchidas e que a decisão esteja completa. Quando
+houver auditoria pendente, exige uma escolha explícita do resultado; sem pendência,
+a etapa de aprendizado permite avançar. Um ritual concluído aparece como registro
+fechado, sem oferecer sobrescrita pela interface.
+
+A importação continua oferecendo dados extraídos para conferência; não aplica
+valores automaticamente aos campos. A prévia extraída permanece no rascunho do ciclo.
+
+Validação do ritual guiado: 12 testes de interface aprovados, incluindo isolamento
+dos rascunhos por ciclo, diagnóstico recalculado e bloqueio de conclusão quando
+métricas ou auditoria anterior estão incompletas. Revisão no navegador em 390×844
+e 1280×800, com navegação Anterior/Próxima e acesso às evidências pelo menu mobile.
+O SHA-256 do banco local permaneceu inalterado.

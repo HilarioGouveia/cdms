@@ -137,6 +137,19 @@ def run_studio():
         st.button("Evidências", icon=":material/right_panel_close:",
                   key="studio_toggle_evidence", on_click=toggle, args=("studio_evidence",))
 
+        # Small-screen ritual uses popovers rather than stacking the side panes.
+        with st.container(key="studio_mobile_tools", horizontal=True, width="content"):
+            with st.popover("Seções", icon=":material/menu:"):
+                active_section = st.session_state.studio_section
+                for target_page, (label, icon) in PAGES.get(active_section, {}).items():
+                    st.button(label, icon=f":material/{icon}:", key=f"mobile_page_{target_page}",
+                              on_click=select_page, args=(active_section, target_page), width="stretch")
+            with st.popover("Evidências", icon=":material/article:"):
+                mobile_cycle = st.session_state.get("studio_cycle")
+                st.caption(f"Ciclo do Cockpit · {mobile_cycle.isoformat()}" if mobile_cycle else "Ciclo de referência do Cockpit")
+                mobile_audit = growth.get_funnel_audit(mobile_cycle.isoformat()) if mobile_cycle else None
+                st.write(mobile_audit.diagnosis_summary if mobile_audit else "Nenhum diagnóstico salvo para este ciclo.")
+
         with st.popover("Workspace e ciclo", icon=":material/workspaces:"):
             st.selectbox("Workspace", ["Local · CDMS"], disabled=True,
                          help="Banco local existente. A seleção de organizações pela API será integrada em outra etapa.")

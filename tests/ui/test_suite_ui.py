@@ -28,6 +28,13 @@ def open_page(at, page):
     assert_healthy(at)
 
 
+def ritual_step(at, step):
+    while at.session_state["_ritual_step"] != step:
+        direction = "next" if at.session_state["_ritual_step"] < step else "previous"
+        at.button(key=f"ritual_{direction}").click().run()
+        assert_healthy(at)
+
+
 @pytest.fixture
 def ui(tmp_path, monkeypatch):
     config = replace(settings_module.settings, DATA_DIR=tmp_path, DB_PATH=tmp_path / "suite.db")
@@ -57,10 +64,11 @@ def test_navigation_and_calibrated_ritual(ui, conversion_type):
     widget(at.button, "Salvar Novas Calibrações").click().run()
     assert_healthy(at)
     open_page(at, "ritual")
+    ritual_step(at, 4)
     at.text_input(key="dec_summary").set_value("Testar CTA no início")
     at.text_area(key="dec_hypothesis").set_value("CTA cedo aumenta cliques")
     at.text_area(key="dec_criterion").set_value("CTR >= 4.5%")
-    widget(at.button, "💾 Concluir e Gravar Ritual Semanal").click().run()
+    at.button(key="ritual_finish").click().run()
     assert_healthy(at)
     assert container_module.get_container().repository.list_rituals(limit=10)
     at.button(key="studio_nav_Experimentos").click().run()
@@ -112,10 +120,11 @@ def test_growth_proposal_ritual_and_audited_outcome(ui, outcome, expected_status
     assert_healthy(at)
     at.date_input(key="cycle_week_start").set_value(date(2026, 11, 2)).run()
     assert_healthy(at)
+    ritual_step(at, 4)
     at.selectbox(key="ritual_proposal").set_value(hypothesis.id).run()
     assert_healthy(at)
     assert at.text_input(key="dec_summary").value == hypothesis.action_description
-    widget(at.button, "💾 Concluir e Gravar Ritual Semanal").click().run()
+    at.button(key="ritual_finish").click().run()
     assert_healthy(at)
     active = growth.get_hypothesis_by_id(hypothesis.id)
     record = container_module.get_container().repository.get_ritual_by_cycle("2026-11-02")
@@ -128,10 +137,11 @@ def test_growth_proposal_ritual_and_audited_outcome(ui, outcome, expected_status
     outcome_widget = widget(at.selectbox, "Resultado Observado:")
     outcome_widget.set_value((outcome, "✅ Meta Atingida" if outcome == "ACHIEVED" else "❌ Meta Não Atingida"))
     widget(at.text_area, "Evidências e Aprendizados Observados:").set_value("CTR medido na plataforma após sete dias")
+    ritual_step(at, 4)
     at.text_input(key="dec_summary").set_value("Testar próximo gancho")
     at.text_area(key="dec_hypothesis").set_value("Gancho claro aumenta retenção")
     at.text_area(key="dec_criterion").set_value("Retenção >= 45%")
-    widget(at.button, "💾 Concluir e Gravar Ritual Semanal").click().run()
+    at.button(key="ritual_finish").click().run()
     assert_healthy(at)
     assert growth.get_hypothesis_by_id(hypothesis.id).status.value == expected_status
     audited = container_module.get_container().repository.get_ritual_by_cycle("2026-11-09")
@@ -147,17 +157,20 @@ def test_growth_proposal_ritual_and_audited_outcome(ui, outcome, expected_status
 
 def test_ritual_validation_and_unavailable_metric(ui):
     at, db_path = ui
-    widget(at.button, "💾 Concluir e Gravar Ritual Semanal").click().run()
+    ritual_step(at, 4)
+    at.button(key="ritual_finish").click().run()
     assert not at.exception
     assert any("campos obrigatórios" in e.value for e in at.error)
     assert not container_module.get_container().repository.list_rituals()
+    ritual_step(at, 2)
     at.checkbox(key="avail_ctr_pct").uncheck().run()
     assert_healthy(at)
     at.selectbox(key="reason_ctr_pct").set_value("TRACKING_ERROR")
+    ritual_step(at, 4)
     at.text_input(key="dec_summary").set_value("Corrigir rastreamento")
     at.text_area(key="dec_hypothesis").set_value("Rastreamento correto permite medir cliques")
     at.text_area(key="dec_criterion").set_value("Eventos de clique validados")
-    widget(at.button, "💾 Concluir e Gravar Ritual Semanal").click().run()
+    at.button(key="ritual_finish").click().run()
     assert_healthy(at)
     record = container_module.get_container().repository.list_rituals()[0]
     snapshot = next(s for s in record.snapshots if s.definition.key == "ctr_pct")
@@ -192,6 +205,7 @@ def test_four_high_cycles_render_drift_alert_and_all_metric_charts(ui):
 
 def test_studio_preserves_ritual_draft_and_panel_toggles(ui):
     at, _ = ui
+    ritual_step(at, 4)
     at.text_input(key="dec_summary").set_value("Rascunho do próximo teste").run()
     at.button(key="studio_nav_Cockpit").click().run()
     assert_healthy(at)
@@ -213,6 +227,7 @@ def test_contextual_sections_remember_selection_and_growth_draft(ui):
     at, _ = ui
     assert not at.tabs
     assert not any(button.label == "Salvar Novas Calibrações" for button in at.button)
+    ritual_step(at, 4)
     at.text_input(key="dec_summary").set_value("Rascunho preservado").run()
     open_page(at, "calibration")
     assert not any(item.key == "dec_summary" for item in at.text_input)
@@ -271,3 +286,61 @@ def test_contextual_export_and_baseline_draft_do_not_save(ui):
     open_page(at, "baseline")
     assert widget(at.number_input, "Ticket Médio do Produto Final (R$)").value == 333.0
     assert SQLiteGrowthRepository(str(db_path)).get_active_baseline() is None
+
+
+def test_wizard_recalculates_diagnosis_and_isolates_cycle_drafts(ui):
+    at, _ = ui
+    assert at.session_state["_ritual_step"] == 1
+    assert not any(item.key == "dec_summary" for item in at.text_input)
+    ritual_step(at, 3)
+    assert any("Equilíbrio Operacional" in item.value for item in at.markdown)
+    ritual_step(at, 2)
+    at.number_input(key="val_ctr_pct").set_value(0.1).run()
+    ritual_step(at, 3)
+    assert any("Sinais Mistos" in item.value for item in at.markdown)
+    ritual_step(at, 4)
+    at.text_input(key="dec_summary").set_value("Rascunho de novembro 9").run()
+    at.date_input(key="cycle_week_start").set_value(date(2026, 11, 2)).run()
+    assert_healthy(at)
+    assert at.session_state["_ritual_step"] == 1
+    ritual_step(at, 4)
+    assert at.text_input(key="dec_summary").value == ""
+    assert at.session_state["val_ctr_pct"] != 0.1
+    at.text_input(key="dec_summary").set_value("Rascunho de novembro 2").run()
+    at.date_input(key="cycle_week_start").set_value(date(2026, 11, 9)).run()
+    assert_healthy(at)
+    assert at.session_state["_ritual_step"] == 4
+    assert at.text_input(key="dec_summary").value == "Rascunho de novembro 9"
+    assert at.session_state["val_ctr_pct"] == 0.1
+    at.date_input(key="cycle_week_start").set_value(date(2026, 11, 2)).run()
+    assert at.text_input(key="dec_summary").value == "Rascunho de novembro 2"
+    assert not container_module.get_container().repository.list_rituals()
+
+
+def test_wizard_validates_hidden_steps_before_writing(ui):
+    from cdms.adapters.ui.components.metric_inputs import CANONICAL_DEFINITIONS, DEFAULT_CALIBRATIONS
+    from cdms.domain.entities.metric import MetricSnapshot
+    at, _ = ui
+    snapshots = [MetricSnapshot(item, DEFAULT_CALIBRATIONS[item.key],
+                               DEFAULT_CALIBRATIONS[item.key].healthy_min)
+                 for item in CANONICAL_DEFINITIONS]
+    container_module.get_container().run_weekly_ritual_use_case.execute(
+        week_start=date(2026, 11, 2), snapshots=snapshots,
+        decision_summary="Decisão anterior", decision_hypothesis="Hipótese anterior",
+        decision_success_criterion="CTR >= 4%", decision_evaluation_due_date=date(2026, 11, 9),
+    )
+    at.run()
+    assert at.selectbox(key="ritual_learning_outcome").value is None
+    at.button_group(key="ritual_step_selector").set_value(4).run()
+    assert_healthy(at)
+    at.text_input(key="dec_summary").set_value("Nova decisão")
+    at.text_area(key="dec_hypothesis").set_value("Hipótese verificável")
+    at.text_area(key="dec_criterion").set_value("CTR >= 5%")
+    at.button(key="ritual_finish").click().run()
+    assert any("métricas na etapa 2" in item.value for item in at.error)
+    assert container_module.get_container().repository.get_ritual_by_cycle("2026-11-09") is None
+    ritual_step(at, 2)
+    ritual_step(at, 4)
+    at.button(key="ritual_finish").click().run()
+    assert any("resultado observado na etapa 1" in item.value for item in at.error)
+    assert container_module.get_container().repository.get_ritual_by_cycle("2026-11-09") is None
