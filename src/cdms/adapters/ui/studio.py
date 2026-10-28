@@ -51,6 +51,8 @@ def navigate(section, page=None):
     st.session_state.studio_explorer = True
     if page is not None:
         st.session_state[f"studio_page_{section}"] = page
+        if section == "Experimentos" and page == "diagnosis":
+            st.session_state["growth_diagnosis_tab"] = "Diagnóstico do ciclo"
 
 
 def select_page(section, page):

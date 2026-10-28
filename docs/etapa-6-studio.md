@@ -114,3 +114,23 @@ dos rascunhos por ciclo, diagnóstico recalculado e bloqueio de conclusão quand
 métricas ou auditoria anterior estão incompletas. Revisão no navegador em 390×844
 e 1280×800, com navegação Anterior/Próxima e acesso às evidências pelo menu mobile.
 O SHA-256 do banco local permaneceu inalterado.
+
+## Diagnóstico do funil em duas abas
+
+"Diagnóstico do ciclo" reúne entradas de tráfego/conversões, execução da auditoria,
+gargalo e oportunidade estimada. "Histórico e evolução" reúne indicadores acumulados,
+comparações, gráfico e tabela dos diagnósticos salvos. Somente a aba aberta é
+renderizada. O histórico pode ser consultado mesmo sem uma baseline ativa.
+
+Entradas são preservadas na sessão durante a troca de aba. Ao voltar para o ciclo,
+o resultado salvo para a data selecionada é reapresentado sem executar uma nova
+auditoria. Uma legenda distingue esse resultado dos campos editáveis: atualizar
+os campos exige executar novamente para atualizar o diagnóstico salvo. Navegar
+entre abas não grava dados. O atalho do Cockpit abre diretamente a aba do ciclo.
+
+No mobile, o diagnóstico reaproveita o foco no conteúdo central e os menus compactos
+de seções/evidências, com os campos em uma coluna.
+
+Validação: 15 testes de interface aprovados. Os três novos casos verificam os dois
+tipos de funil, a preservação das entradas/resultados entre abas e o acesso ao
+histórico sem baseline. A alternância das abas também foi conferida no navegador.

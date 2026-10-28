@@ -344,3 +344,46 @@ def test_wizard_validates_hidden_steps_before_writing(ui):
     at.button(key="ritual_finish").click().run()
     assert any("resultado observado na etapa 1" in item.value for item in at.error)
     assert container_module.get_container().repository.get_ritual_by_cycle("2026-11-09") is None
+
+
+@pytest.mark.parametrize("conversion_type", ["DIRECT_SALE", "LEAD"])
+def test_funnel_tabs_preserve_inputs_and_saved_result(ui, conversion_type):
+    at, db_path = ui
+    at.button(key="studio_nav_Experimentos").click().run()
+    open_page(at, "baseline")
+    widget(at.selectbox, "Tipo de Conversão Comercial").set_value(conversion_type).run()
+    widget(at.button, "Salvar Baseline Ativa").click().run()
+    open_page(at, "diagnosis")
+    assert [tab.label for tab in at.tabs] == ["Diagnóstico do ciclo", "Histórico e evolução"]
+    at.number_input(key="growth_impressions").set_value(15000)
+    at.number_input(key="growth_clicks").set_value(500)
+    widget(at.button, "Executar Diagnóstico Financeiro").click().run()
+    assert_healthy(at)
+    saved_metrics = [(item.label, item.value) for item in at.metric]
+    assert saved_metrics
+    assert not at.dataframe
+    # AppTest cannot click native tabs; set their documented keyed state.
+    at.session_state["growth_diagnosis_tab"] = "Histórico e evolução"
+    at.run()
+    assert_healthy(at)
+    assert not any(item.key == "growth_impressions" for item in at.number_input)
+    assert widget(at.metric, "Ciclos Auditados").value == "1"
+    assert len(at.dataframe[0].value) == 1
+    at.session_state["growth_diagnosis_tab"] = "Diagnóstico do ciclo"
+    at.run()
+    assert_healthy(at)
+    assert at.number_input(key="growth_impressions").value == 15000
+    assert at.number_input(key="growth_clicks").value == 500
+    assert [(item.label, item.value) for item in at.metric] == saved_metrics
+    assert len(SQLiteGrowthRepository(str(db_path)).list_funnel_audits()) == 1
+
+
+def test_funnel_history_is_accessible_without_baseline(ui):
+    at, _ = ui
+    at.button(key="studio_nav_Experimentos").click().run()
+    at.session_state["growth_diagnosis_tab"] = "Histórico e evolução"
+    at.run()
+    assert_healthy(at)
+    assert any("Nenhuma auditoria registrada" in item.value for item in at.info)
+    assert not at.warning
+    assert not any(button.label == "Executar Diagnóstico Financeiro" for button in at.button)

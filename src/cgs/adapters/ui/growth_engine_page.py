@@ -33,118 +33,128 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db", *, section="diagnosi
     # ABA 1: Diagnóstico de Funil e Histórico Acumulado
     # =========================================================================
     if section == "diagnosis":
-        st.subheader("Auditoria de Oportunidade de Receita")
-        active_baseline = repo.get_active_baseline()
-        if not active_baseline:
-            st.warning("Cadastre primeiro uma linha de base em 'Baseline do funil' na navegação lateral.")
-        else:
-            is_lead_funnel = active_baseline.conversion_type == ConversionType.LEAD
-            
-            funnel_badge = "Funil de 2 Passos (LEAD)" if is_lead_funnel else "Venda Direta (DIRECT_SALE)"
-            st.info(
-                f"Configuração Ativa: **{funnel_badge}** | "
-                f"Ticket Médio: **R$ {active_baseline.ticket_price:,.2f}** | "
-                f"CTR Meta: **{active_baseline.expected_ctr_pct}%**"
+        with st.container(key="growth_funnel"):
+            cycle_tab, history_tab = st.tabs(
+                ["Diagnóstico do ciclo", "Histórico e evolução"],
+                key="growth_diagnosis_tab", on_change="rerun",
             )
-
-            col1, col2, col3 = st.columns(3)
-            source_cycle = col1.date_input("Segunda-feira de Referência", value=date.today() - timedelta(days=date.today().weekday() + 7), key="growth_source_cycle")
-            impressions = col2.number_input("Impressões Totais", min_value=0, value=10000, step=500, key="growth_impressions")
-            clicks = col3.number_input("Cliques Registados", min_value=0, value=300, step=50, key="growth_clicks")
-
-            leads = None
-            if is_lead_funnel:
-                col_lead, col_conv = st.columns(2)
-                leads = col_lead.number_input("Leads Captados (Opt-in)", min_value=0, value=60, step=5, key="growth_leads")
-                conversions = col_conv.number_input("Vendas Concluídas (a partir dos Leads)", min_value=0, value=6, step=1, key="growth_conversions")
-            else:
-                conversions = st.number_input("Conversões / Vendas Concluídas", min_value=0, value=15, step=5, key="growth_conversions_2")
-
-            if st.button("Executar Diagnóstico Financeiro", type="primary"):
-                try:
-                    if source_cycle.weekday() != 0:
-                        raise ValueError("O ciclo deve começar numa segunda-feira.")
-                    audit = audit_uc.execute(
-                        source_cycle_id=source_cycle.isoformat(),
-                        impressions=impressions,
-                        clicks=clicks,
-                        conversions=conversions,
-                        leads=leads,
-                    )
-                    st.success(audit.diagnosis_summary)
-
-                    if is_lead_funnel:
-                        m1, m2, m3, m4 = st.columns(4)
-                        m1.metric("Gargalo Crítico", audit.primary_bottleneck.value)
-                        m2.metric("Perda Intenção (CTR)", f"R$ {audit.intention_opportunity_reais:,.2f}")
-                        m3.metric("Perda Captura Lead", f"R$ {(audit.leads_opportunity_reais or Decimal('0.00')):,.2f}")
-                        m4.metric("Perda Fechamento Venda", f"R$ {(audit.closing_opportunity_reais or Decimal('0.00')):,.2f}")
+            with cycle_tab:
+                if cycle_tab.open:
+                    st.subheader("Auditoria de Oportunidade de Receita")
+                    active_baseline = repo.get_active_baseline()
+                    if not active_baseline:
+                        st.warning("Cadastre primeiro uma linha de base em 'Baseline do funil' na navegação lateral.")
                     else:
-                        m1, m2, m3 = st.columns(3)
-                        m1.metric("Gargalo Crítico", audit.primary_bottleneck.value)
-                        m2.metric("Oportunidade Intenção", f"R$ {audit.intention_opportunity_reais:,.2f}")
-                        m3.metric("Oportunidade Conversão", f"R$ {audit.conversion_opportunity_reais:,.2f}")
+                        is_lead_funnel = active_baseline.conversion_type == ConversionType.LEAD
 
-                    st.info(f"💰 Oportunidade Estimada Total Destravável: **R$ {audit.total_opportunity_reais:,.2f}**")
-                except Exception as e:
-                    st.error(f"Erro ao executar auditoria: {e}")
+                        funnel_badge = "Funil de 2 Passos (LEAD)" if is_lead_funnel else "Venda Direta (DIRECT_SALE)"
+                        st.info(
+                            f"Configuração Ativa: **{funnel_badge}** | "
+                            f"Ticket Médio: **R$ {active_baseline.ticket_price:,.2f}** | "
+                            f"CTR Meta: **{active_baseline.expected_ctr_pct}%**"
+                        )
 
-        st.divider()
-        st.subheader("📈 Histórico Acumulado de Oportunidade Desperdiçada")
-        
-        audit_history = audit_uc.get_audit_history(limit=20)
-        if not audit_history:
-            st.info("Nenhuma auditoria registrada no histórico até o momento.")
-        else:
-            total_historico = sum(a.total_opportunity_reais for a in audit_history)
-            media_desperdicio = total_historico / Decimal(str(len(audit_history)))
+                        col1, col2, col3 = st.columns(3)
+                        source_cycle = col1.date_input("Segunda-feira de Referência", value=date.today() - timedelta(days=date.today().weekday() + 7), key="growth_source_cycle")
+                        impressions = col2.number_input("Impressões Totais", min_value=0, value=10000, step=500, key="growth_impressions")
+                        clicks = col3.number_input("Cliques Registados", min_value=0, value=300, step=50, key="growth_clicks")
 
-            col_h1, col_h2, col_h3 = st.columns(3)
-            col_h1.metric("Ciclos Auditados", len(audit_history))
-            col_h2.metric("Desperdício Total Registrado", f"R$ {total_historico:,.2f}")
-            col_h3.metric("Média de Desperdício / Ciclo", f"R$ {media_desperdicio:,.2f}")
+                        leads = None
+                        if is_lead_funnel:
+                            col_lead, col_conv = st.columns(2)
+                            leads = col_lead.number_input("Leads Captados (Opt-in)", min_value=0, value=60, step=5, key="growth_leads")
+                            conversions = col_conv.number_input("Vendas Concluídas (a partir dos Leads)", min_value=0, value=6, step=1, key="growth_conversions")
+                        else:
+                            conversions = st.number_input("Conversões / Vendas Concluídas", min_value=0, value=15, step=5, key="growth_conversions_2")
 
-            if len(audit_history) >= 2:
-                ultimo = audit_history[0].total_opportunity_reais
-                penultimo = audit_history[1].total_opportunity_reais
-                delta_reais = ultimo - penultimo
-                if delta_reais <= Decimal("0"):
-                    st.success(
-                        f"🎉 **ROI de Governança Positivo:** Redução de **R$ {abs(delta_reais):,.2f}** em oportunidade desperdiçada "
-                        f"do ciclo `{audit_history[1].source_cycle_id}` para `{audit_history[0].source_cycle_id}`!"
-                    )
-                else:
-                    st.warning(
-                        f"⚠️ Aumento de **R$ {delta_reais:,.2f}** em oportunidade desperdiçada no ciclo "
-                        f"`{audit_history[0].source_cycle_id}` em relação ao anterior."
-                    )
+                        if st.button("Executar Diagnóstico Financeiro", type="primary"):
+                            try:
+                                if source_cycle.weekday() != 0:
+                                    raise ValueError("O ciclo deve começar numa segunda-feira.")
+                                audit_uc.execute(
+                                    source_cycle_id=source_cycle.isoformat(),
+                                    impressions=impressions,
+                                    clicks=clicks,
+                                    conversions=conversions,
+                                    leads=leads,
+                                )
+                            except Exception as e:
+                                st.error(f"Erro ao executar auditoria: {e}")
+                        audit = repo.get_funnel_audit(source_cycle.isoformat())
+                        if audit is not None:
+                            st.caption(f"Diagnóstico salvo · {source_cycle:%d/%m/%Y}. Execute novamente para atualizar com os valores dos campos.")
+                            st.success(audit.diagnosis_summary)
 
-            chart_data = []
-            for a in reversed(audit_history):
-                chart_data.append({
-                    "Ciclo": a.source_cycle_id,
-                    "Perda em Intenção (R$)": float(a.intention_opportunity_reais),
-                    "Perda em Conversão (R$)": float(a.conversion_opportunity_reais),
-                })
-            
-            st.bar_chart(
-                data=chart_data,
-                x="Ciclo",
-                y=["Perda em Intenção (R$)", "Perda em Conversão (R$)"],
-                stack=True,
-            )
+                            if audit.leads_opportunity_reais is not None:
+                                m1, m2, m3, m4 = st.columns(4)
+                                m1.metric("Gargalo Crítico", audit.primary_bottleneck.value)
+                                m2.metric("Perda Intenção (CTR)", f"R$ {audit.intention_opportunity_reais:,.2f}")
+                                m3.metric("Perda Captura Lead", f"R$ {(audit.leads_opportunity_reais or Decimal('0.00')):,.2f}")
+                                m4.metric("Perda Fechamento Venda", f"R$ {(audit.closing_opportunity_reais or Decimal('0.00')):,.2f}")
+                            else:
+                                m1, m2, m3 = st.columns(3)
+                                m1.metric("Gargalo Crítico", audit.primary_bottleneck.value)
+                                m2.metric("Oportunidade Intenção", f"R$ {audit.intention_opportunity_reais:,.2f}")
+                                m3.metric("Oportunidade Conversão", f"R$ {audit.conversion_opportunity_reais:,.2f}")
 
-            table_rows = []
-            for a in audit_history:
-                table_rows.append({
-                    "Ciclo": a.source_cycle_id,
-                    "Gargalo Dominante": a.primary_bottleneck.value,
-                    "Perda Intenção": f"R$ {a.intention_opportunity_reais:,.2f}",
-                    "Perda Conversão": f"R$ {a.conversion_opportunity_reais:,.2f}",
-                    "Oportunidade Total": f"R$ {a.total_opportunity_reais:,.2f}",
-                    "Resumo Diagnóstico": a.diagnosis_summary,
-                })
-            st.dataframe(table_rows, width="stretch", hide_index=True)
+                            st.info(f"💰 Oportunidade Estimada Total Destravável: **R$ {audit.total_opportunity_reais:,.2f}**")
+            with history_tab:
+                if history_tab.open:
+                    st.subheader("📈 Histórico Acumulado de Oportunidade Desperdiçada")
+
+                    audit_history = audit_uc.get_audit_history(limit=20)
+                    if not audit_history:
+                        st.info("Nenhuma auditoria registrada no histórico até o momento.")
+                    else:
+                        total_historico = sum(a.total_opportunity_reais for a in audit_history)
+                        media_desperdicio = total_historico / Decimal(str(len(audit_history)))
+
+                        col_h1, col_h2, col_h3 = st.columns(3)
+                        col_h1.metric("Ciclos Auditados", len(audit_history))
+                        col_h2.metric("Desperdício Total Registrado", f"R$ {total_historico:,.2f}")
+                        col_h3.metric("Média de Desperdício / Ciclo", f"R$ {media_desperdicio:,.2f}")
+
+                        if len(audit_history) >= 2:
+                            ultimo = audit_history[0].total_opportunity_reais
+                            penultimo = audit_history[1].total_opportunity_reais
+                            delta_reais = ultimo - penultimo
+                            if delta_reais <= Decimal("0"):
+                                st.success(
+                                    f"🎉 **ROI de Governança Positivo:** Redução de **R$ {abs(delta_reais):,.2f}** em oportunidade desperdiçada "
+                                    f"do ciclo `{audit_history[1].source_cycle_id}` para `{audit_history[0].source_cycle_id}`!"
+                                )
+                            else:
+                                st.warning(
+                                    f"⚠️ Aumento de **R$ {delta_reais:,.2f}** em oportunidade desperdiçada no ciclo "
+                                    f"`{audit_history[0].source_cycle_id}` em relação ao anterior."
+                                )
+
+                        chart_data = []
+                        for a in reversed(audit_history):
+                            chart_data.append({
+                                "Ciclo": a.source_cycle_id,
+                                "Perda em Intenção (R$)": float(a.intention_opportunity_reais),
+                                "Perda em Conversão (R$)": float(a.conversion_opportunity_reais),
+                            })
+
+                        st.bar_chart(
+                            data=chart_data,
+                            x="Ciclo",
+                            y=["Perda em Intenção (R$)", "Perda em Conversão (R$)"],
+                            stack=True,
+                        )
+
+                        table_rows = []
+                        for a in audit_history:
+                            table_rows.append({
+                                "Ciclo": a.source_cycle_id,
+                                "Gargalo Dominante": a.primary_bottleneck.value,
+                                "Perda Intenção": f"R$ {a.intention_opportunity_reais:,.2f}",
+                                "Perda Conversão": f"R$ {a.conversion_opportunity_reais:,.2f}",
+                                "Oportunidade Total": f"R$ {a.total_opportunity_reais:,.2f}",
+                                "Resumo Diagnóstico": a.diagnosis_summary,
+                            })
+                        st.dataframe(table_rows, width="stretch", hide_index=True)
 
     # =========================================================================
     # ABA 2: Backlog de Hipóteses e Ciclo de Vida
