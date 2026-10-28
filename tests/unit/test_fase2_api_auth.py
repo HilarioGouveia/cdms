@@ -6,6 +6,12 @@ from fastapi import HTTPException
 from cdms.config.security import create_access_token, decode_access_token, verify_password, get_password_hash
 from cdms.domain.entities.tenant import TenantContext, UserRole
 from cdms.adapters.api.dependencies import get_current_tenant
+from cdms.adapters.persistence.sqlite_identity_repo import SQLiteIdentityRepository
+
+
+@pytest.fixture(autouse=True)
+def signing_key(monkeypatch):
+    monkeypatch.setenv("CDMS_SECRET_KEY", "unit-test-signing-key-with-at-least-32-bytes")
 
 
 class DummyCredentials:
@@ -29,9 +35,12 @@ def test_jwt_token_encode_decode():
     assert decoded["role"] == "OWNER"
 
 
-def test_tenant_dependency_resolution():
-    token = create_access_token({"sub": "user_100", "workspace_id": "ws_florianopolis", "role": "ADMIN"})
-    tenant = get_current_tenant(DummyCredentials(token))
-    assert tenant.user_id == "user_100"
-    assert tenant.workspace_id == "ws_florianopolis"
-    assert tenant.role == UserRole.ADMIN
+def test_tenant_dependency_resolution(tmp_path):
+    repo = SQLiteIdentityRepository(tmp_path / "identity.db")
+    user = repo.create_user("admin@example.com", get_password_hash("MySecretPassword123"), "Admin")
+    workspace_id = repo.create_workspace("Workspace", "workspace", user["id"])
+    token = create_access_token({"sub": user["id"], "workspace_id": workspace_id, "role": "VIEWER"})
+    tenant = get_current_tenant(DummyCredentials(token), repo, "unit-test-signing-key-with-at-least-32-bytes")
+    assert tenant.user_id == user["id"]
+    assert tenant.workspace_id == workspace_id
+    assert tenant.role == UserRole.OWNER

@@ -87,10 +87,10 @@ flowchart TD
 
 ### 2. Fase 2: Nuvem, Multi-Tenant e API REST
 
-* **Isolamento por Workspace**: Entidades `Workspace`, `TenantContext` e controle de permissões por perfil (`CREATOR`, `OPERATOR`, `VIEWER`, `ADMIN`).
-* **Segurança e Autenticação JWT**: Hashing de senhas via `passlib[bcrypt]` e emissão de tokens Bearer com escopo unívoco de workspace.
-* **API REST FastAPI**: Endpoints `/api/v1/auth/login`, `/api/v1/workspaces/current`, `/api/v1/growth/audit-funnel` e `/api/v1/rituals/audit-decision`.
-* **Migração 004**: Tabelas `workspaces`, `users`, `workspace_memberships` e particionamento das tabelas de rituais, decisões e hipóteses via `workspace_id`.
+* **Isolamento por Workspace na API**: Identidade central e um banco SQLite operacional por UUID de workspace, escolhido pelo servidor após validar o vínculo do usuário. Perfis: `OWNER`, `ADMIN`, `MEMBER` e `VIEWER`.
+* **Autenticação JWT**: Login com usuário ativo e vínculo persistido; senhas novas com PBKDF2-SHA256 e leitura de hashes bcrypt legados. JWT exige chave externa, emissor, audiência e expiração. Logout e troca de senha revogam tokens anteriores.
+* **API REST FastAPI**: Endpoints de autenticação, membros, baseline, auditorias, hipóteses, rituais, orçamento e otimização em `/api/v1`. Consulte `/docs` e [o guia da etapa 4](docs/etapa-4-autenticacao-workspaces.md).
+* **Identidade e dados operacionais**: A migração 004 cria `users`, `workspaces` e `workspace_members` no banco de identidade; cada workspace usa um arquivo próprio para rituais, decisões e hipóteses. O banco local legado não é migrado ou atribuído automaticamente a usuários.
 
 ### 3. Fase 3: Automação, Conectores e Inteligência Heurística
 
@@ -220,6 +220,8 @@ pytest -v
 * **API REST FastAPI (Nuvem / Multi-Tenant):**
 
   ```bash
+  # Configure antes CDMS_SECRET_KEY com pelo menos 32 bytes aleatórios.
+  # Provisione usuário e workspace conforme o guia da etapa 4.
   uvicorn cdms.adapters.api.main:app --reload --port 8000
   ```
 
@@ -268,3 +270,16 @@ Fluxo manual para uma hipótese CGS:
 7. Consulte o histórico e a prévia do relatório no CGS.
 
 A validação automatizada cobre comportamento e persistência. Aparência visual no navegador, upload real de arquivos e integrações externas exigem verificações próprias.
+
+
+## Autenticação e workspaces da API
+
+A API exige `CDMS_SECRET_KEY` e não aceita a chave demonstrativa antiga. O comando abaixo provisiona um proprietário e um workspace, solicitando a senha sem eco no terminal:
+
+```powershell
+.\.venv\Scripts\python.exe -m cdms.adapters.api.bootstrap --email owner@example.com --name "Proprietário" --workspace "Meu workspace"
+```
+
+Use o UUID retornado no login de `/api/v1/auth/login`. O servidor verifica o vínculo a cada requisição; enviar outro `workspace_id` em cabeçalhos ou payload não troca o armazenamento autenticado. `VIEWER` pode ler os dados, enquanto `MEMBER`, `ADMIN` e `OWNER` podem executar operações de negócio. Apenas `OWNER` e `ADMIN` gerenciam membros, com restrições para alterar administradores e proteger o proprietário.
+
+O Streamlit continua sendo a interface local do banco `data/cdms_dev.db`. Ele não passa a ser uma interface multiusuário autenticada por esta alteração. [Configuração e limites da etapa 4](docs/etapa-4-autenticacao-workspaces.md).

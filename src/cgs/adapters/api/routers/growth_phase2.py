@@ -3,9 +3,9 @@
 from decimal import Decimal
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from cdms.adapters.api.routers.growth import InputModel as BaseModel
 
-from cdms.adapters.api.dependencies import get_current_tenant
+from cdms.adapters.api.dependencies import get_workspace_repositories, require_writer, WorkspaceRepositories
 from cdms.domain.entities.tenant import TenantContext
 from cgs.adapters.persistence.sqlite_cgs_fase2_repo import SQLiteCGSPhase2Repository
 from cgs.application.use_cases.allocate_experiment_budget import AllocateExperimentBudgetUseCase
@@ -51,10 +51,12 @@ class BayesianEvaluationResponse(BaseModel):
 @router.post("/allocate-budget", response_model=BudgetAllocationResponse)
 def allocate_budget(
     payload: BudgetAllocationRequest,
-    tenant: TenantContext = Depends(get_current_tenant),
+    store: WorkspaceRepositories = Depends(get_workspace_repositories),
+    _writer: TenantContext = Depends(require_writer),
 ):
     """Aloca teto orçamentário para o teste com trava de limite do ciclo."""
-    repo = SQLiteCGSPhase2Repository()
+    store.hypothesis(payload.hypothesis_id)
+    repo = store.phase2()
     uc = AllocateExperimentBudgetUseCase(repo)
 
     try:
@@ -72,17 +74,19 @@ def allocate_budget(
             risk_tier=alloc.risk_tier.value,
             burn_rate_pct=float(alloc.burn_rate_pct),
         )
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/evaluate-statistical-significance", response_model=BayesianEvaluationResponse)
 def evaluate_significance(
     payload: BayesianEvaluationRequest,
-    tenant: TenantContext = Depends(get_current_tenant),
+    store: WorkspaceRepositories = Depends(get_workspace_repositories),
+    _writer: TenantContext = Depends(require_writer),
 ):
     """Calcula a significância Bayesiana, lift e regras de Early Stopping."""
-    repo = SQLiteCGSPhase2Repository()
+    store.hypothesis(payload.hypothesis_id)
+    repo = store.phase2()
     try:
         eval_result = BayesianExperimentAnalyzer.evaluate(
             hypothesis_id=payload.hypothesis_id,
@@ -101,5 +105,22 @@ def evaluate_significance(
             verdict=eval_result.verdict.value,
             sample_adequacy_ratio=float(eval_result.sample_adequacy_ratio),
         )
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@router.get("/budgets/{hypothesis_id}")
+def get_budget(hypothesis_id: int, store: WorkspaceRepositories = Depends(get_workspace_repositories)):
+    store.hypothesis(hypothesis_id)
+    budget = store.phase2().get_budget_by_hypothesis(hypothesis_id)
+    if budget is None:
+        raise HTTPException(404, "Orçamento não encontrado neste workspace.")
+    return budget
+
+
+@router.get("/evaluations/{hypothesis_id}")
+def get_evaluation(hypothesis_id: int, store: WorkspaceRepositories = Depends(get_workspace_repositories)):
+    store.hypothesis(hypothesis_id)
+    evaluation = store.phase2().get_evaluation_by_hypothesis(hypothesis_id)
+    if evaluation is None:
+        raise HTTPException(404, "Avaliação não encontrada neste workspace.")
+    return evaluation

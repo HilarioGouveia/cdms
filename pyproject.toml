@@ -45,6 +45,7 @@ automation = [
 ]
 dev = [
     "pytest>=8.0.0",
+    "httpx>=0.27.0",
 ]
 
 [tool.setuptools.packages.find]
