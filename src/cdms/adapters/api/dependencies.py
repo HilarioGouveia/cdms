@@ -1,7 +1,7 @@
 """Autorização revalidada no banco a cada requisição e armazenamento por workspace."""
 from dataclasses import dataclass
 from pathlib import Path
-from uuid import UUID
+from cdms.config.workspace_storage import workspace_db_path
 
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -83,10 +83,8 @@ class WorkspaceRepositories:
 def get_workspace_repositories(request: Request, tenant: TenantContext = Depends(get_current_tenant)) -> WorkspaceRepositories:
     # UUID gerado pelo servidor: nunca usar nomes, cabeçalhos ou caminhos enviados pelo cliente.
     try:
-        workspace_key = UUID(tenant.workspace_id).hex
+        path = workspace_db_path(request.app.state.workspace_data_dir, tenant.workspace_id)
     except ValueError:
         raise HTTPException(403, "Identificador de workspace inválido.")
-    root = request.app.state.workspace_data_dir.resolve()
-    path = root / f"{workspace_key}.db"
-    root.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     return WorkspaceRepositories(path, SQLiteRepository(path), SQLiteGrowthRepository(str(path)))

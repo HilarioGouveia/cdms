@@ -22,6 +22,7 @@ class DummyCredentials:
 def test_password_hashing():
     pwd = "MySecretPassword123"
     hashed = get_password_hash(pwd)
+    assert hashed.startswith("$pbkdf2-sha256$600000$")
     assert verify_password(pwd, hashed) is True
     assert verify_password("WrongPassword", hashed) is False
 

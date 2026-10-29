@@ -79,3 +79,10 @@ data/**/*.db
 data/**/*.db-wal
 data/**/*.db-shm
 data/**/*.db-journal
+
+# Estado local do agendador Celery
+/data/celerybeat-schedule*
+/celerybeat-schedule*
+
+# Logs da instância local do Studio
+/data/studio-server.*.log

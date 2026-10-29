@@ -1,0 +1,96 @@
+/* Continuous IDE shell: outer regions are panes, business cards stay inside. */
+.stApp:has(.st-key-studio_titlebar) header[data-testid="stHeader"] { display: none; }
+.stMainBlockContainer:has(.st-key-studio_titlebar) {
+    padding: 0 !important;
+    max-width: none !important;
+}
+.stMainBlockContainer:has(.st-key-studio_titlebar) > div { gap: 0; }
+.st-key-studio_titlebar {
+    padding: 8px 16px;
+    background: #101722;
+    border-bottom: 1px solid #283549;
+    align-items: center;
+    min-height: 56px;
+}
+.st-key-studio_titlebar p, .st-key-studio_statusbar p { margin: 0; }
+.st-key-studio_workspace { min-height: calc(100dvh - 84px); }
+.st-key-studio_dock {
+    padding: 12px 4px;
+    background: #101722;
+    border-right: 1px solid #283549;
+    min-height: calc(100dvh - 84px);
+    gap: 8px;
+}
+.st-key-studio_dock button { min-height: 44px; padding: 8px; border-radius: 0; border: 0; }
+.st-key-studio_dock button [data-testid="stMarkdownContainer"] {
+    position: absolute; width: 1px; height: 1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.st-key-studio_explorer_panel, .st-key-studio_evidence_panel {
+    background: #161f30;
+    padding: 20px 16px;
+    min-height: calc(100dvh - 84px);
+    border-radius: 0;
+}
+.st-key-studio_explorer_panel { border-right: 1px solid #283549; }
+.st-key-studio_evidence_panel { border-left: 1px solid #283549; padding: 20px; }
+.st-key-studio_explorer_panel button { justify-content: flex-start; text-align: left; }
+.st-key-studio_explorer_panel h3, .st-key-studio_evidence_panel h3 {
+    font-size: 1.15rem; line-height: 1.4;
+}
+.st-key-studio_editor { padding: 20px 28px; min-height: calc(100dvh - 84px); }
+.st-key-studio_editor h1 { font-size: clamp(26px, 2.6vw, 38px); font-weight: 600; letter-spacing: -0.7px; }
+.st-key-studio_editor h3 { font-size: 1.3rem; }
+.st-key-studio_opportunity { border-left: 3px solid #6ee7b7; }
+.st-key-studio_opportunity [data-testid="stMetricValue"] {
+    color: #6ee7b7; font-variant-numeric: tabular-nums;
+}
+.st-key-studio_statusbar {
+    background: #162c4d; border-top: 1px solid #283549;
+    padding: 3px 14px; min-height: 28px;
+}
+.st-key-studio_statusbar p { font-size: 12px; }
+.st-key-studio_mobile_tools { display: none; }
+/* Focused mobile flows: hide side panes, retain menus and the dock. */
+@media (max-width: 900px) {
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_toggle_explorer,
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_toggle_evidence { display: none; }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_mobile_tools { display: flex; }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_explorer_panel),
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_evidence_panel) {
+        display: none;
+    }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-studio_dock) {
+        flex-direction: column;
+    }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_editor),
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_dock),
+    .st-key-ritual_wizard [data-testid="stHorizontalBlock"] > [data-testid="stColumn"], .st-key-growth_funnel [data-testid="stHorizontalBlock"] > [data-testid="stColumn"], .st-key-growth_backlog [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        flex: 1 1 100% !important;
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+    .st-key-ritual_steps { display: none; }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_dock {
+        min-height: auto; flex-direction: row; flex-wrap: wrap; border-right: 0;
+    }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_dock > div {
+        flex: 1 1 44px; width: auto;
+    }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_dock button [data-testid="stMarkdownContainer"] {
+        position: static; width: auto; height: auto; clip-path: none;
+    }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_titlebar [data-testid="stCaptionContainer"] { display: none; }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_editor { min-width: 0; padding: 16px; }
+    .st-key-ritual_navigation button { min-height: 44px; }
+}
+@media (max-width: 640px) {
+    .st-key-studio_dock { min-height: auto; flex-direction: row; flex-wrap: wrap; border-right: 0; }
+    .st-key-studio_dock > div { flex: 1 1 44px; width: auto; }
+    .st-key-studio_explorer_panel, .st-key-studio_evidence_panel,
+    .st-key-studio_editor { min-height: auto; padding: 16px; }
+    .st-key-studio_titlebar { flex-wrap: wrap; }
+    .st-key-studio_dock button [data-testid="stMarkdownContainer"] {
+        position: static; width: auto; height: auto; clip-path: none;
+    }
+}

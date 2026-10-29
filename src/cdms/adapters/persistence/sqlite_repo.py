@@ -361,6 +361,22 @@ class SQLiteRepository(RepositoryPort):
                 recorded_at=datetime.fromisoformat(row["recorded_at"])
             )
 
+    def get_learning_by_decision_id(self, decision_id: int) -> Optional[Learning]:
+        """Consulta o aprendizado auditado de uma decisão, sem inferir pelo status CGS."""
+        with self._connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM learnings WHERE target_decision_id = ? ORDER BY id DESC LIMIT 1",
+                (decision_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            return Learning(
+                id=row["id"], target_decision_id=row["target_decision_id"],
+                target_decision_summary=row["target_decision_summary"],
+                outcome=HypothesisOutcome(row["outcome"]), evidence_notes=row["evidence_notes"],
+                recorded_at=datetime.fromisoformat(row["recorded_at"]),
+            )
+
     def list_rituals(self, limit: int = 20) -> List[WeeklyRitualRecord]:
         with self._connection() as conn:
             cursor = conn.cursor()

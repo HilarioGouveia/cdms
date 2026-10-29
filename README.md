@@ -12,7 +12,7 @@ A suíte unifica a **governança de saúde e rituais** ao **motor de aceleraçã
 
 | Módulo | Papel Metodológico | Entregáveis Principais | Especificação |
 | :--- | :--- | :--- | :--- |
-| **CDMS**<br>*(Creator Data Marketing)* | **Governança, Ritual & Plataforma**<br>Linha de base, eliminação de métricas de vaidade, classificação heurística determinística e trava de decisão única por ciclo. | • Ritual semanal em 4 passos com idempotência (`cycle_id = YYYY-MM-DD`)<br>• Motor determinístico exaustivo (81 combinações)<br>• API REST Multi-Tenant (FastAPI + JWT)<br>• Ingestão automatizada (Meta, YouTube, TikTok) e Celery | `docs/SDD-CDMS-001-v2.4.0.md`<br>`docs/FASE_2_CDMS_MULTI_TENANT_API.md` |
+| **CDMS**<br>*(Creator Data Marketing)* | **Governança, Ritual & Plataforma**<br>Linha de base, eliminação de métricas de vaidade, classificação heurística determinística e trava de decisão única por ciclo. | • Ritual semanal em 4 passos com idempotência (`cycle_id = YYYY-MM-DD`)<br>• Motor determinístico exaustivo (81 combinações)<br>• API REST Multi-Tenant (FastAPI + JWT)<br>• Ingestão semanal Meta Ads com Celery/Redis (YouTube e TikTok no roadmap) | `docs/SDD-CDMS-001-v2.4.0.md`<br>`docs/FASE_2_CDMS_MULTI_TENANT_API.md` |
 | **CGS**<br>*(Creator Growth System)* | **Experimentação & Funil**<br>Diagnóstico financeiro de perdas em $R\$$, priorização determinística por ICE Score, governança causal e ciclo de 7 dias. | • Diagnóstico de funil: Venda Direta (`DIRECT_SALE`) e 2 Passos (`LEAD`)<br>• Histórico cumulativo de oportunidades e ROI de governança<br>• Trava causal de variável única (`ConflictingActiveVariableError`)<br>• Sincronização bidirecional atômica com as Decisões do CDMS | `docs/SDD-CGS-001-v1_2_0.md` |
 
 ---
@@ -94,10 +94,10 @@ flowchart TD
 
 ### 3. Fase 3: Automação, Conectores e Inteligência Heurística
 
-* **Conectores de Plataformas**: Porta `PlatformConnectorPort` e adaptadores para Meta Ads, YouTube Studio e TikTok Ads.
+* **Conectores de Plataformas**: Adaptador HTTP de leitura do Meta Ads com período semanal agregado, timeouts e erros classificados. YouTube e TikTok continuam no roadmap; a API retorna 501 para esses adaptadores.
 * **Creator Health Index**: Score ponderado de saúde operacional ($P_{10}/P_{90}$) com classificação em tiers (`EXCELLENT`, `HEALTHY`, `VULNERABLE`, `CRITICAL`).
 * **Geração Assistida de Hipóteses (IA)**: Serviço `AIHypothesisGenerator` derivando ações causais, piso de corte e ICE Score a partir dos gargalos detectados.
-* **Pipeline Assíncrono com Celery & Redis**: Tarefas distribuídas em background para sincronização de dados de mídia.
+* **Pipeline Assíncrono com Celery & Redis**: Outbox no banco do workspace, jobs idempotentes, retentativas limitadas, lease de execução e ingestões preservadas por versão. Agendamento semanal habilitado explicitamente por conexão.
 * **Migração 005**: Tabelas `platform_connections`, `creator_health_history` e `ai_hypothesis_suggestions`.
 
 ---
@@ -283,3 +283,17 @@ A API exige `CDMS_SECRET_KEY` e não aceita a chave demonstrativa antiga. O coma
 Use o UUID retornado no login de `/api/v1/auth/login`. O servidor verifica o vínculo a cada requisição; enviar outro `workspace_id` em cabeçalhos ou payload não troca o armazenamento autenticado. `VIEWER` pode ler os dados, enquanto `MEMBER`, `ADMIN` e `OWNER` podem executar operações de negócio. Apenas `OWNER` e `ADMIN` gerenciam membros, com restrições para alterar administradores e proteger o proprietário.
 
 O Streamlit continua sendo a interface local do banco `data/cdms_dev.db`. Ele não passa a ser uma interface multiusuário autenticada por esta alteração. [Configuração e limites da etapa 4](docs/etapa-4-autenticacao-workspaces.md).
+
+
+## Ingestão semanal do Meta Ads
+
+A [etapa 5](docs/etapa-5-meta-ads-ingestao.md) implementa o adaptador HTTP do Meta Ads, armazenamento cifrado de credenciais, jobs persistidos por workspace e worker Celery. Os testes cobrem o fluxo com respostas HTTP controladas e worker real, incluindo Redis de desenvolvimento.
+
+```powershell
+docker compose -f compose.automation.yml up -d --wait
+$env:CDMS_REDIS_URL = "redis://127.0.0.1:6381/0"
+```
+
+Configure uma chave Fernet em `CDMS_CREDENTIAL_KEY`, separada da chave JWT, antes de cadastrar contas. API e worker devem usar a mesma chave e os mesmos caminhos de identidade/workspaces. Consulte o guia para os comandos completos.
+
+A sincronização prepara métricas para revisão no ritual; não cria uma decisão nem fecha uma semana automaticamente. Retenção não suportada permanece indisponível, e o gasto conserva a moeda da conta. Nenhuma conta externa real foi usada nos testes automatizados.

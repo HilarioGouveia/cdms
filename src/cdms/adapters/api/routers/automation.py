@@ -15,11 +15,6 @@ from cgs.application.use_cases.audit_funnel_opportunity import AuditFunnelOpport
 router = APIRouter(prefix="/automation", tags=["Fase 3: Automação & IA"])
 
 
-class ConnectPlatformRequest(BaseModel):
-    platform: str
-    account_id: str
-
-
 class AISuggestionResponse(BaseModel):
     action_description: str
     tested_variable: str
@@ -29,12 +24,6 @@ class AISuggestionResponse(BaseModel):
     invalidation_floor: float
     rational_explanation: str
     suggested_ice_score: float
-
-
-@router.post("/connect-platform")
-def connect_platform(payload: ConnectPlatformRequest, tenant: TenantContext = Depends(require_writer)):
-    """Conecta e valida credenciais da conta oficial (Meta Ads ou YouTube Studio)."""
-    raise HTTPException(501, "Conexões reais de plataformas serão implementadas na etapa de automação.")
 
 
 @router.post("/ai-suggestions", response_model=List[AISuggestionResponse])

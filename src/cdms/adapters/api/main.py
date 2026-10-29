@@ -9,19 +9,25 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from cdms.adapters.api.routers import auth, growth, workspaces, rituals, automation
+from cdms.adapters.api.routers import auth, growth, workspaces, rituals, automation, platforms
 from cgs.adapters.api.routers import growth_phase2, growth_phase3
 from cdms.adapters.persistence.sqlite_identity_repo import SQLiteIdentityRepository
 from cdms.config.security import get_password_hash, get_secret_key
 from cdms.config.settings import settings
 
 
-def create_app(*, identity_db_path=None, workspace_data_dir=None, secret_key=None):
+def create_app(*, identity_db_path=None, workspace_data_dir=None, secret_key=None,
+               credential_key=None, platform_connector_factory=None, ingestion_dispatcher=None):
     @asynccontextmanager
     async def lifespan(app):
         app.state.secret_key = get_secret_key(secret_key)
-        app.state.identity = SQLiteIdentityRepository(Path(identity_db_path or settings.DATA_DIR / "identity.db"))
-        app.state.workspace_data_dir = Path(workspace_data_dir or settings.DATA_DIR / "workspaces")
+        from cdms.config.workspace_storage import identity_db_path as default_identity_path, workspace_data_dir as default_workspace_dir
+        from cdms.adapters.tasks.ingestion_runtime import meta_connector_factory, dispatch_job
+        app.state.identity = SQLiteIdentityRepository(Path(identity_db_path or default_identity_path()))
+        app.state.workspace_data_dir = Path(workspace_data_dir or default_workspace_dir())
+        app.state.credential_key = credential_key
+        app.state.platform_connector_factory = platform_connector_factory or meta_connector_factory
+        app.state.ingestion_dispatcher = ingestion_dispatcher or dispatch_job
         app.state.dummy_password_hash = get_password_hash(secrets.token_urlsafe(32))
         yield
 
@@ -31,7 +37,7 @@ def create_app(*, identity_db_path=None, workspace_data_dir=None, secret_key=Non
         app.add_middleware(CORSMiddleware, allow_origins=origins, allow_credentials=False,
                            allow_methods=["GET", "POST", "PUT", "DELETE"], allow_headers=["Authorization", "Content-Type"])
     for router in (auth.router, workspaces.router, growth.router, rituals.router,
-                   automation.router, growth_phase2.router, growth_phase3.router):
+                   automation.router, platforms.router, growth_phase2.router, growth_phase3.router):
         app.include_router(router, prefix="/api/v1")
 
     @app.exception_handler(ValueError)

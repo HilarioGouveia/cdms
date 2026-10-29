@@ -114,3 +114,11 @@ class SQLiteIdentityRepository:
             row = conn.execute("SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ?",
                                (workspace_id, user_id)).fetchone()
         return UserRole(row["role"]) if row else None
+
+    def workspace_exists(self, workspace_id):
+        with self.connection() as conn:
+            return conn.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone() is not None
+
+    def workspace_ids(self):
+        with self.connection() as conn:
+            return [row["id"] for row in conn.execute("SELECT id FROM workspaces ORDER BY id")]
