@@ -102,13 +102,14 @@ def test_growth_proposal_ritual_and_audited_outcome(ui, outcome, expected_status
     widget(at.button, "Executar Diagnóstico Financeiro").click().run()
     assert_healthy(at)
     open_page(at, "backlog")
+    at.button(key="backlog_new_hypothesis").click().run()
     widget(at.text_input, "Ação Prática").set_value("Inserir CTA claro aos 5 segundos")
     widget(at.selectbox, "Variável Única").set_value("CTA")
     widget(at.button, "Adicionar ao Backlog").click().run()
     assert_healthy(at)
     growth = SQLiteGrowthRepository(str(db_path))
     hypothesis = growth.list_hypotheses()[0]
-    at.date_input(key="proposal_cycle").set_value(date(2026, 11, 2))
+    at.date_input(key=f"growth_proposal_cycle_{hypothesis.id}").set_value(date(2026, 11, 2))
     at.button(key=f"btn_prop_{hypothesis.id}").click().run()
     assert_healthy(at)
     pending = growth.get_hypothesis_by_id(hypothesis.id)
@@ -149,6 +150,11 @@ def test_growth_proposal_ritual_and_audited_outcome(ui, outcome, expected_status
     assert audited.learning.outcome.value == outcome
     at.button(key="studio_nav_Experimentos").click().run()
     assert_healthy(at)
+    at.session_state["growth_backlog_tab"] = "Histórico"
+    at.run()
+    assert_healthy(at)
+    assert any("Resultado auditado" in item.value for item in at.markdown)
+    assert any("CTR medido na plataforma após sete dias" in item.value for item in at.markdown)
     open_page(at, "report")
     widget(at.selectbox, "Ciclo Alvo do Relatório").set_value("2026-11-02").run()
     assert_healthy(at)
@@ -233,6 +239,7 @@ def test_contextual_sections_remember_selection_and_growth_draft(ui):
     assert not any(item.key == "dec_summary" for item in at.text_input)
     at.button(key="studio_nav_Experimentos").click().run()
     open_page(at, "backlog")
+    at.button(key="backlog_new_hypothesis").click().run()
     widget(at.text_input, "Ação Prática").set_value("Hipótese ainda não enviada").run()
     at.button(key="studio_nav_Governança").click().run()
     assert at.session_state["studio_page_Governança"] == "calibration"
@@ -387,3 +394,103 @@ def test_funnel_history_is_accessible_without_baseline(ui):
     assert any("Nenhuma auditoria registrada" in item.value for item in at.info)
     assert not at.warning
     assert not any(button.label == "Executar Diagnóstico Financeiro" for button in at.button)
+
+
+def test_backlog_tabs_creation_and_draft_preservation(ui):
+    at, db_path = ui
+    at.button(key="studio_nav_Experimentos").click().run()
+    open_page(at, "backlog")
+    assert [tab.label for tab in at.tabs] == ["Backlog", "Em teste", "Histórico"]
+    assert not any(item.key == "growth_action" for item in at.text_input)
+    at.button(key="backlog_new_hypothesis").click().run()
+    at.text_input(key="growth_action").set_value("Rascunho de hipótese").run()
+    at.session_state["growth_backlog_tab"] = "Em teste"
+    at.run()
+    assert_healthy(at)
+    assert not any(item.key == "growth_action" for item in at.text_input)
+    at.session_state["growth_backlog_tab"] = "Backlog"
+    at.run()
+    assert at.text_input(key="growth_action").value == "Rascunho de hipótese"
+    at.button(key="backlog_new_hypothesis").click().run()
+    assert not any(item.key == "growth_action" for item in at.text_input)
+    at.button(key="backlog_new_hypothesis").click().run()
+    assert at.text_input(key="growth_action").value == "Rascunho de hipótese"
+    widget(at.button, "Adicionar ao Backlog").click().run()
+    assert_healthy(at)
+    assert len(SQLiteGrowthRepository(str(db_path)).list_hypotheses()) == 1
+    assert not any(item.key == "growth_action" for item in at.text_input)
+    at.button(key="backlog_new_hypothesis").click().run()
+    assert at.text_input(key="growth_action").value == ""
+
+
+def create_backlog_hypothesis(growth, action, variable="CTA", score=7, lower=False):
+    from decimal import Decimal
+    from cgs.application.use_cases.manage_hypotheses import ManageHypothesesUseCase
+    from cgs.domain.entities.hypothesis import VariableType, MetricDirection
+    return ManageHypothesesUseCase(growth).create_hypothesis(
+        action_description=action, tested_variable=VariableType(variable),
+        target_metric_key="ctr_pct", target_metric_unit="%",
+        metric_direction=MetricDirection.LOWER_IS_BETTER if lower else MetricDirection.HIGHER_IS_BETTER,
+        baseline_reference_value=Decimal("3"), success_metric_target=Decimal("2") if lower else Decimal("4.5"),
+        invalidation_floor=Decimal("4") if lower else Decimal("2.5"),
+        expected_impact_description="Hipótese verificável", impact_score=score,
+        confidence_score=score, ease_score=score,
+    )
+
+
+def test_backlog_ranking_filters_and_per_card_proposal(ui):
+    from cgs.application.use_cases.prepare_cdms_proposal import PrepareCDMSProposalUseCase
+    at, db_path = ui
+    growth = SQLiteGrowthRepository(str(db_path))
+    first = create_backlog_hypothesis(growth, "Prioridade intermediária", score=7)
+    reserved = create_backlog_hypothesis(growth, "Gancho reservado", variable="HOOK", score=4)
+    high = create_backlog_hypothesis(growth, "Maior prioridade", score=9)
+    PrepareCDMSProposalUseCase(growth_repository=growth).execute(
+        hypothesis_id=reserved.id, target_cycle_start=date(2026, 11, 2),
+    )
+    at.button(key="studio_nav_Experimentos").click().run()
+    open_page(at, "backlog")
+    actions = [item.value for item in at.markdown if item.value in {
+        "**Maior prioridade**", "**Prioridade intermediária**", "**Gancho reservado**",
+    }]
+    assert actions == ["**Maior prioridade**", "**Prioridade intermediária**", "**Gancho reservado**"]
+    at.selectbox(key="growth_backlog_variable").set_value("HOOK").run()
+    assert not any(item.key == f"btn_prop_{high.id}" for item in at.button)
+    assert at.button(key=f"btn_prop_{reserved.id}")
+    at.selectbox(key="growth_backlog_cycle").set_value("unassigned").run()
+    assert any("Nenhuma hipótese corresponde" in item.value for item in at.info)
+    at.selectbox(key="growth_backlog_variable").set_value(None).run()
+    assert at.button(key=f"btn_prop_{first.id}")
+    at.date_input(key=f"growth_proposal_cycle_{high.id}").set_value(date(2026, 11, 10))
+    at.button(key=f"btn_prop_{high.id}").click().run()
+    assert not at.exception
+    assert at.error
+    assert growth.get_hypothesis_by_id(high.id).target_cycle_id is None
+    at.date_input(key=f"growth_proposal_cycle_{high.id}").set_value(date(2026, 11, 9)).run()
+    at.button(key=f"btn_prop_{high.id}").click().run()
+    assert_healthy(at)
+    proposal = growth.get_hypothesis_by_id(high.id)
+    assert proposal.status.value == "PENDING"
+    assert proposal.promoted_decision_id is None
+    assert proposal.target_cycle_id == "2026-11-09"
+
+
+def test_active_and_manual_history_do_not_claim_audited_result(ui):
+    from cgs.application.use_cases.manage_hypotheses import ManageHypothesesUseCase
+    at, db_path = ui
+    growth = SQLiteGrowthRepository(str(db_path))
+    hypothesis = create_backlog_hypothesis(growth, "Reduzir custo", lower=True)
+    ManageHypothesesUseCase(growth).activate_hypothesis(hypothesis.id, target_cycle_id="2026-11-02")
+    at.button(key="studio_nav_Experimentos").click().run()
+    open_page(at, "backlog")
+    at.session_state["growth_backlog_tab"] = "Em teste"
+    at.run()
+    assert_healthy(at)
+    assert any("≤ 2" in item.value for item in at.markdown)
+    assert any("09/11/2026" in item.value for item in at.caption)
+    at.button(key=f"btn_comp_{hypothesis.id}").click().run()
+    at.session_state["growth_backlog_tab"] = "Histórico"
+    at.run()
+    assert_healthy(at)
+    assert any("Sem aprendizado auditado vinculado" in item.value for item in at.caption)
+    assert not any("Resultado auditado" in item.value for item in at.markdown)

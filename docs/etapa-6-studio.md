@@ -134,3 +134,34 @@ de seções/evidências, com os campos em uma coluna.
 Validação: 15 testes de interface aprovados. Os três novos casos verificam os dois
 tipos de funil, a preservação das entradas/resultados entre abas e o acesso ao
 histórico sem baseline. A alternância das abas também foi conferida no navegador.
+
+## Backlog e hipóteses
+
+A página reaproveita as três abas existentes: Backlog, Em teste e Histórico,
+agora no topo e com renderização apenas da aba aberta. O botão "Nova hipótese"
+abre o formulário recolhível; fechar ou trocar de aba preserva o rascunho na sessão.
+Após criar com sucesso, o formulário fecha e a próxima criação começa vazia.
+
+O Backlog usa cartões ordenados por ICE, com ação, variável, meta e ciclo reservado.
+Referência, limite de invalidação e composição do ICE ficam nos detalhes expansíveis.
+Filtros por variável e ciclo ajudam a comparar hipóteses. Cada cartão tem seu próprio
+controle "Preparar para ritual", com escolha do ciclo e confirmação; preparar mantém
+a hipótese pendente, sem inventar decisão nem iniciar o experimento.
+
+Em teste apresenta meta, limite, ciclo e prazo da decisão vinculada (ou fim da janela
+quando não existe decisão vinculada). As ações manuais existentes ficam recolhidas,
+com indicação de que mudam o status e não registram aprendizado auditado.
+
+O Histórico consulta o aprendizado da decisão no CDMS e mostra resultado e evidências
+quando há auditoria. Encerramentos sem aprendizado vinculado são identificados como
+tal. A consulta `get_learning_by_decision_id` é somente leitura e usa o mesmo banco
+local; não exige migração. A criação, o preparo e as transições continuam usando os
+casos de uso existentes.
+
+O layout mobile reaproveita os menus compactos do Studio e campos em uma coluna.
+
+Validação: 18 testes de interface aprovados. Os novos casos cobrem criação e rascunho,
+ranking/filtros, escolha e validação do ciclo por cartão, e encerramento manual sem
+falso resultado auditado. O fluxo completo existente também verifica o aprendizado
+real no Histórico após a auditoria do ritual. No navegador, foram verificadas as
+três abas e a abertura/fechamento do formulário. O banco local manteve seu SHA-256.

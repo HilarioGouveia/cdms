@@ -9,15 +9,7 @@ from cdms.adapters.persistence.sqlite_repo import SQLiteRepository
 from pathlib import Path
 from cgs.application.use_cases.audit_funnel_opportunity import AuditFunnelOpportunityUseCase
 from cgs.application.use_cases.export_cycle_report import ExportCycleReportUseCase
-from cgs.application.use_cases.manage_hypotheses import ManageHypothesesUseCase
-from cgs.application.use_cases.prepare_cdms_proposal import PrepareCDMSProposalUseCase
 from cgs.domain.entities.funnel import ConversionType, FunnelBaseline
-from cgs.domain.entities.hypothesis import (
-    ConflictingActiveVariableError,
-    HypothesisStatus,
-    MetricDirection,
-    VariableType,
-)
 
 
 def render_growth_engine(db_path: str = "data/cdms_dev.db", *, section="diagnosis"):
@@ -25,9 +17,8 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db", *, section="diagnosi
         raise ValueError("Seção de experimentos desconhecida.")
     repo = SQLiteGrowthRepository(db_path)
     audit_uc = AuditFunnelOpportunityUseCase(repo)
-    hypo_uc = ManageHypothesesUseCase(repo)
-    prop_uc = PrepareCDMSProposalUseCase(growth_repository=repo)
-    export_uc = ExportCycleReportUseCase(growth_repository=repo, cdms_repository=SQLiteRepository(Path(db_path)))
+    core_repo = SQLiteRepository(Path(db_path))
+    export_uc = ExportCycleReportUseCase(growth_repository=repo, cdms_repository=core_repo)
 
     # =========================================================================
     # ABA 1: Diagnóstico de Funil e Histórico Acumulado
@@ -160,132 +151,8 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db", *, section="diagnosi
     # ABA 2: Backlog de Hipóteses e Ciclo de Vida
     # =========================================================================
     if section == "backlog":
-        st.subheader("Nova Hipótese Operacional (Janela de 7 Dias)")
-        with st.container(border=True, key="new_hypothesis_form"):
-            action = st.text_input("Ação Prática", placeholder="Ex: Adicionar CTA verbal direto nos primeiros 5s", key="growth_action")
-            col_var, col_met, col_unit, col_dir = st.columns(4)
-            var_type = col_var.selectbox("Variável Única", [v.value for v in VariableType], key="growth_var_type")
-            metric_key = col_met.text_input("Chave da Métrica", value="ctr_pct", key="growth_metric_key")
-            metric_unit = col_unit.text_input("Unidade", value="%", key="growth_metric_unit")
-            direction = col_dir.selectbox("Direção", [d.value for d in MetricDirection], key="growth_direction")
-
-            c_base, c_target, c_floor = st.columns(3)
-            base_val = c_base.number_input("Referência Atual", value=3.0, step=0.1, key="growth_base_val")
-            target_val = c_target.number_input("Meta de Sucesso", value=4.5, step=0.1, key="growth_target_val")
-            floor_val = c_floor.number_input("Piso/Teto Invalidação", value=2.5, step=0.1, key="growth_floor_val")
-
-            c_imp, c_conf, c_ease = st.columns(3)
-            impact = c_imp.slider("Impacto (1-10)", 1, 10, 7, key="growth_impact")
-            conf = c_conf.slider("Confiança (1-10)", 1, 10, 7, key="growth_conf")
-            ease = c_ease.slider("Facilidade (1-10)", 1, 10, 8, key="growth_ease")
-
-            submitted = st.button("Adicionar ao Backlog")
-            if submitted:
-                try:
-                    new_h = hypo_uc.create_hypothesis(
-                        action_description=action,
-                        tested_variable=VariableType(var_type),
-                        target_metric_key=metric_key,
-                        target_metric_unit=metric_unit,
-                        metric_direction=MetricDirection(direction),
-                        baseline_reference_value=Decimal(str(base_val)),
-                        success_metric_target=Decimal(str(target_val)),
-                        invalidation_floor=Decimal(str(floor_val)),
-                        expected_impact_description=f"Destravar {metric_key}",
-                        impact_score=impact,
-                        confidence_score=conf,
-                        ease_score=ease,
-                    )
-                    st.success(f"Hipótese #{new_h.id} cadastrada com ICE Score de {new_h.ice_score}!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao salvar hipótese: {e}")
-
-        st.divider()
-
-        target_cycle = st.date_input(
-            "Ciclo alvo da proposta CDMS",
-            value=date.today() - timedelta(days=date.today().weekday()),
-            key="proposal_cycle",
-        )
-        sub_pend, sub_act, sub_hist = st.tabs(["⏳ Pendentes (Ranking ICE)", "🔬 Em Teste (ACTIVE)", "📜 Histórico"])
-
-        with sub_pend:
-            st.subheader("Backlog Pendente Priorizado")
-            backlog = hypo_uc.get_ranked_backlog()
-            if not backlog:
-                st.info("Nenhuma hipótese pendente no backlog.")
-            else:
-                for h in backlog:
-                    with st.expander(f"⭐ ICE: {h.ice_score} | [{h.tested_variable.value}] {h.action_description}"):
-                        st.write(f"**Meta:** {h.target_metric_key} para {h.success_metric_target}{h.target_metric_unit} (Piso: {h.invalidation_floor}{h.target_metric_unit})")
-                        if h.target_cycle_id:
-                            st.info(f"Proposta preparada para `{h.target_cycle_id}`. Conclua o ritual no CDMS para ativá-la.")
-                        st.write(f"**Parâmetros ICE:** Impacto: {h.impact_score} | Confiança: {h.confidence_score} | Facilidade: {h.ease_score}")
-
-                        c_act, c_disc = st.columns([3, 1])
-                        if c_act.button(f"Preparar para Ritual CDMS #{h.id}", key=f"btn_prop_{h.id}"):
-                            try:
-                                proposal = prop_uc.execute(
-                                    hypothesis_id=h.id,
-                                    target_cycle_start=target_cycle,
-                                )
-                                st.success(
-                                    f"Proposta #{h.id} preparada para o ciclo `{proposal.target_cycle_id}`. "
-                                    "Selecione-a no CDMS e conclua o ritual para iniciar o teste."
-                                )
-                                st.code(proposal.formal_hypothesis, language="markdown")
-                                st.rerun()
-                            except ConflictingActiveVariableError as var_err:
-                                st.error(f"🛑 Trava de Governança Acionada:\n\n{var_err}")
-                            except Exception as e:
-                                st.error(f"Erro ao processar ativação: {e}")
-
-                        if c_disc.button("Descartar", key=f"btn_disc_pend_{h.id}"):
-                            hypo_uc.discard_hypothesis(h.id)
-                            st.warning(f"Hipótese #{h.id} descartada.")
-                            st.rerun()
-
-        with sub_act:
-            st.subheader("Hipóteses Atualmente em Teste Operacional")
-            active_hypotheses = hypo_uc.list_by_status(HypothesisStatus.ACTIVE)
-            if not active_hypotheses:
-                st.info("Nenhuma hipótese em execução ativa no momento.")
-            else:
-                for h in active_hypotheses:
-                    with st.expander(f"🔵 #{h.id} - [{h.tested_variable.value}] {h.action_description}", expanded=True):
-                        decision_badge = f"Decisão CDMS #{h.promoted_decision_id}" if h.promoted_decision_id else "Decisão CDMS não vinculada"
-                        st.caption(f"🔗 **Vínculo Operacional:** `{decision_badge}` | **Ciclo:** `{h.target_cycle_id or 'Não definido'}`")
-                        st.write(f"**Meta Esperada:** {h.target_metric_key} ≥ {h.success_metric_target}{h.target_metric_unit}")
-                        st.write(f"**Piso de Invalidação:** {h.invalidation_floor}{h.target_metric_unit}")
-
-                        if h.promoted_decision_id:
-                            st.caption("O resultado deste teste será auditado no próximo ritual CDMS.")
-                        col_comp, col_disc = st.columns(2)
-                        if col_comp.button("Concluir Teste (COMPLETED)", key=f"btn_comp_{h.id}", type="primary"):
-                            hypo_uc.complete_hypothesis(h.id)
-                            st.success(f"Hipótese #{h.id} concluída com sucesso!")
-                            st.rerun()
-
-                        if col_disc.button("Invalidar / Descartar (DISCARDED)", key=f"btn_disc_act_{h.id}"):
-                            hypo_uc.discard_hypothesis(h.id)
-                            st.warning(f"Hipótese #{h.id} marcada como descartada.")
-                            st.rerun()
-
-        with sub_hist:
-            st.subheader("Histórico de Conclusão e Descarte")
-            completed = hypo_uc.list_by_status(HypothesisStatus.COMPLETED)
-            discarded = hypo_uc.list_by_status(HypothesisStatus.DISCARDED)
-
-            st.markdown(f"**Concluídas ({len(completed)})**")
-            for h in completed:
-                dec_ref = f" (Decisão CDMS #{h.promoted_decision_id})" if h.promoted_decision_id else ""
-                st.caption(f"✅ #{h.id} [{h.tested_variable.value}] {h.action_description}{dec_ref} — ICE: {h.ice_score}")
-
-            st.markdown(f"**Descartadas ({len(discarded)})**")
-            for h in discarded:
-                dec_ref = f" (Decisão CDMS #{h.promoted_decision_id})" if h.promoted_decision_id else ""
-                st.caption(f"❌ #{h.id} [{h.tested_variable.value}] {h.action_description}{dec_ref} — ICE: {h.ice_score}")
+        from cgs.adapters.ui.backlog_page import render_backlog_page
+        render_backlog_page(repo, core_repo, date.today())
 
     # =========================================================================
     # ABA 3: Configuração de Baseline

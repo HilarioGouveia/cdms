@@ -53,35 +53,35 @@
 .st-key-studio_mobile_tools { display: none; }
 /* Focused mobile flows: hide side panes, retain menus and the dock. */
 @media (max-width: 900px) {
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_toggle_explorer,
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_toggle_evidence { display: none; }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_mobile_tools { display: flex; }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_explorer_panel),
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_evidence_panel) {
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_toggle_explorer,
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_toggle_evidence { display: none; }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_mobile_tools { display: flex; }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_explorer_panel),
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_evidence_panel) {
         display: none;
     }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_workspace [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-studio_dock) {
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-studio_dock) {
         flex-direction: column;
     }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_editor),
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_dock),
-    .st-key-ritual_wizard [data-testid="stHorizontalBlock"] > [data-testid="stColumn"], .st-key-growth_funnel [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_editor),
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_dock),
+    .st-key-ritual_wizard [data-testid="stHorizontalBlock"] > [data-testid="stColumn"], .st-key-growth_funnel [data-testid="stHorizontalBlock"] > [data-testid="stColumn"], .st-key-growth_backlog [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
         flex: 1 1 100% !important;
         width: 100% !important;
         min-width: 0 !important;
     }
     .st-key-ritual_steps { display: none; }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_dock {
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_dock {
         min-height: auto; flex-direction: row; flex-wrap: wrap; border-right: 0;
     }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_dock > div {
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_dock > div {
         flex: 1 1 44px; width: auto;
     }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_dock button [data-testid="stMarkdownContainer"] {
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_dock button [data-testid="stMarkdownContainer"] {
         position: static; width: auto; height: auto; clip-path: none;
     }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_titlebar [data-testid="stCaptionContainer"] { display: none; }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel)) .st-key-studio_editor { min-width: 0; padding: 16px; }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_titlebar [data-testid="stCaptionContainer"] { display: none; }
+    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_editor { min-width: 0; padding: 16px; }
     .st-key-ritual_navigation button { min-height: 44px; }
 }
 @media (max-width: 640px) {
