@@ -8,7 +8,9 @@ from pathlib import Path
 
 import streamlit as st
 
-from cdms.config.container import get_container
+from cdms.adapters.ui.studio_workspaces import (
+    LOCAL, DEMO, initialize_workspace, switch_workspace, workspace_container,
+)
 from cgs.adapters.persistence.sqlite_growth_repo import SQLiteGrowthRepository
 from cgs.domain.entities.hypothesis import HypothesisStatus
 
@@ -32,9 +34,15 @@ PAGES = {
         "baseline": ("Baseline do funil", "tune"),
         "report": ("Relatório executivo", "description"),
     },
+    "Demonstração": {
+        "demo_data": ("Dados de demonstração", "database"),
+        "demo_catalog": ("Catálogo de cenários", "grid_view"),
+    },
 }
 
 PAGE_DESCRIPTIONS = {
+    "demo_data": "Prepare um ambiente simulado para apresentar os fluxos do CDMS.",
+    "demo_catalog": "Explore as combinações heurísticas sem alterar dados.",
     "ritual": "Uma decisão prioritária, com hipótese, critério e prazo.",
     "history": "Acompanhe a evolução das métricas e os aprendizados de cada ciclo.",
     "export": "Exporte o registro da decisão e suas evidências.",
@@ -111,9 +119,10 @@ def run_studio():
     st.set_page_config(page_title="CDMS Studio · Decision Cockpit",
                        page_icon=":material/space_dashboard:", layout="wide")
     st.html(Path(__file__).parent / "styles" / "studio.css")
+    initialize_workspace()
     defaults = {"studio_section": "Cockpit", "studio_explorer": True,
                 "studio_evidence": True, "studio_page_Governança": "ritual",
-                "studio_page_Experimentos": "diagnosis"}
+                "studio_page_Experimentos": "diagnosis", "studio_page_Demonstração": "demo_data"}
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
     # Retain draft widgets when their module is not rendered. Do not retain
@@ -128,11 +137,13 @@ def run_studio():
         ):
             st.session_state[key] = st.session_state[key]
 
-    core = get_container()
+    core = workspace_container()
+    is_demo = st.session_state.studio_workspace == DEMO
+    sections = {**SECTIONS, "Demonstração": "science"} if is_demo else SECTIONS
     growth = SQLiteGrowthRepository(str(core.settings.DB_PATH))
     with st.container(key="studio_titlebar", horizontal=True):
-        st.markdown(":material/space_dashboard: **CDMS STUDIO**")
-        st.caption("Workspace local / Decision Cockpit")
+        st.markdown(":material/space_dashboard: **CDMS STUDIO · DADOS SIMULADOS**" if is_demo else ":material/space_dashboard: **CDMS STUDIO**")
+        st.caption("Workspace CDMS Demo" if is_demo else "Workspace local / Decision Cockpit")
         st.space("stretch")
         st.button("Navegação", icon=":material/left_panel_close:",
                   key="studio_toggle_explorer", on_click=toggle, args=("studio_explorer",))
@@ -153,26 +164,27 @@ def run_studio():
                 st.write(mobile_audit.diagnosis_summary if mobile_audit else "Nenhum diagnóstico salvo para este ciclo.")
 
         with st.popover("Workspace e ciclo", icon=":material/workspaces:"):
-            st.selectbox("Workspace", ["Local · CDMS"], disabled=True,
-                         help="Banco local existente. A seleção de organizações pela API será integrada em outra etapa.")
+            st.selectbox("Workspace", [LOCAL, DEMO], key="studio_workspace", on_change=switch_workspace,
+                         help="Local e demonstração usam bancos separados. Organizações autenticadas continuam na API.")
             today = date.today()
+            st.session_state.setdefault("studio_cycle", today - timedelta(days=today.weekday()))
             cycle = st.date_input("Ciclo de referência do Cockpit",
-                                 value=today - timedelta(days=today.weekday()), key="studio_cycle")
-            st.caption("Modo local · sem autenticação · dados deste ambiente")
+                                 key="studio_cycle")
+            st.caption("Dados simulados · ambiente de apresentação" if is_demo else "Modo local · sem autenticação · dados deste ambiente")
     if cycle.weekday() != 0:
         st.error("Selecione uma segunda-feira para o ciclo do Cockpit.")
         return
     weights = [0.5] + ([2.15] if st.session_state.studio_explorer else []) + [6]
     if st.session_state.studio_evidence:
         weights.append(3.2)
-    with st.container(key="studio_workspace", gap=None):
+    with st.container(key="studio_workbench", gap=None):
         panels = iter(st.columns(weights, gap=None))
     dock = next(panels)
     explorer = next(panels) if st.session_state.studio_explorer else None
     editor = next(panels)
     evidence = next(panels) if st.session_state.studio_evidence else None
     with dock, st.container(key="studio_dock"):
-        for section, icon in SECTIONS.items():
+        for section, icon in sections.items():
             st.button(section, icon=f":material/{icon}:", help=section,
                       type="primary" if st.session_state.studio_section == section else "secondary",
                       key=f"studio_nav_{section}", on_click=navigate, args=(section,), width="stretch")
@@ -181,7 +193,7 @@ def run_studio():
             section = st.session_state.studio_section
             st.caption(section.upper() if section in PAGES else "ESPAÇO DE TRABALHO")
             with st.container(border=True):
-                st.markdown(":material/folder_open: **Local · CDMS**")
+                st.markdown(f":material/folder_open: **{st.session_state.studio_workspace}**")
                 st.divider()
                 if section in PAGES:
                     for page, (label, icon) in PAGES[section].items():
@@ -193,6 +205,7 @@ def run_studio():
                     st.markdown(":material/space_dashboard: **Visão do ciclo**")
             st.caption(f"Ciclo de referência · {cycle:%d/%m/%Y}")
             descriptions = {
+                "Demonstração": "Pacotes simulados e catálogo de cenários para apresentação.",
                 "Cockpit": "Visão do ciclo, oportunidade estimada e próximas decisões.",
                 "Governança": "Ritual semanal, histórico, exportação e calibrações.",
                 "Experimentos": "Diagnóstico do funil, backlog ICE, baseline e relatório.",
@@ -208,7 +221,14 @@ def run_studio():
             render_cockpit(core, growth, cycle.isoformat())
         elif section == "Governança":
             from cdms.adapters.ui.streamlit_app import run_app
-            run_app(embedded=True, section=page)
+            run_app(embedded=True, section=page, container=core)
+        elif section == "Demonstração":
+            from cdms.adapters.ui.demo_page import render_demo_data, render_demo_catalog
+            with st.container(key="studio_demo"):
+                if page == "demo_catalog":
+                    render_demo_catalog()
+                else:
+                    render_demo_data()
         else:
             from cgs.adapters.ui.growth_engine_page import render_growth_engine
             render_growth_engine(db_path=str(core.settings.DB_PATH), section=page)
@@ -225,5 +245,5 @@ def run_studio():
             st.divider()
             st.caption("Assistente ainda não conectado. Este painel exibe evidências persistidas.")
     with st.container(key="studio_statusbar", horizontal=True):
-        st.caption(f"Local · Regras v{core.settings.RULES_VERSION}")
-        st.caption("Integração Meta Ads disponível pela API · leitura de métricas")
+        st.caption(f"{'DEMO · DADOS SIMULADOS' if is_demo else 'Local'} · Regras v{core.settings.RULES_VERSION}")
+        st.caption("Demonstração sem conexões externas" if is_demo else "Integração Meta Ads disponível pela API · leitura de métricas")

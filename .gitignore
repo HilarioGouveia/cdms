@@ -86,3 +86,4 @@ data/**/*.db-journal
 
 # Logs da instância local do Studio
 /data/studio-server.*.log
+/data/demo/

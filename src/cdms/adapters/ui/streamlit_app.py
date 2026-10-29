@@ -19,7 +19,7 @@ def load_css():
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
-def run_app(*, embedded=False, section="ritual"):
+def run_app(*, embedded=False, section="ritual", container=None):
     if section not in {"ritual", "history", "export", "calibration"}:
         raise ValueError("Seção de governança desconhecida.")
     if not embedded:
@@ -30,7 +30,7 @@ def run_app(*, embedded=False, section="ritual"):
         )
     load_css()
 
-    container = get_container()
+    container = container or get_container()
     repo = container.repository
 
     # Persistência de Calibrações na Sessão

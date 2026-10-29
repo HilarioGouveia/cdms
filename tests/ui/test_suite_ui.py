@@ -494,3 +494,98 @@ def test_active_and_manual_history_do_not_claim_audited_result(ui):
     assert_healthy(at)
     assert any("Sem aprendizado auditado vinculado" in item.value for item in at.caption)
     assert not any("Resultado auditado" in item.value for item in at.markdown)
+
+
+def test_demo_workspace_load_and_switch_keep_local_data_and_drafts(ui):
+    import hashlib
+    at, db_path = ui
+    ritual_step(at, 4)
+    at.text_input(key="dec_summary").set_value("Rascunho real preservado").run()
+    before = hashlib.sha256(db_path.read_bytes()).hexdigest()
+    at.selectbox(key="studio_workspace").set_value("CDMS Demo").run()
+    assert_healthy(at)
+    assert at.session_state["studio_section"] == "Demonstração"
+    assert at.button(key="demo_load")
+    at.button(key="demo_load").click().run()
+    assert_healthy(at)
+    manifest = at.session_state["_demo_manifest"]
+    assert manifest["counts"]["rituals"] == 12
+    assert manifest["counts"]["hypotheses"] == 18
+    assert at.button(key="demo_load").disabled
+    demo_core = at.session_state["_demo_container"]
+    assert demo_core.settings.DB_PATH != db_path
+    at.button(key="demo_present_cycle").click().run()
+    assert_healthy(at)
+    assert at.metric
+    assert any("DADOS SIMULADOS" in item.value for item in at.caption)
+    at.button(key="studio_nav_Governança").click().run()
+    ritual_step(at, 4)
+    at.text_input(key="dec_summary").set_value("Rascunho simulado").run()
+    at.selectbox(key="studio_workspace").set_value("Local · CDMS").run()
+    assert_healthy(at)
+    assert at.text_input(key="dec_summary").value == "Rascunho real preservado"
+    assert not container_module.get_container().repository.list_rituals()
+    assert hashlib.sha256(db_path.read_bytes()).hexdigest() == before
+    at.selectbox(key="studio_workspace").set_value("CDMS Demo").run()
+    assert_healthy(at)
+    assert at.text_input(key="dec_summary").value == "Rascunho simulado"
+    assert len(demo_core.repository.list_rituals(limit=100)) == 12
+
+
+def test_demo_restore_is_new_generation_and_catalog_is_read_only(ui):
+    at, db_path = ui
+    at.selectbox(key="studio_workspace").set_value("CDMS Demo").run()
+    widget(at.selectbox, "Pacote de demonstração").set_value("Cobertura completa").run()
+    at.button(key="demo_load").click().run()
+    assert_healthy(at)
+    previous = at.session_state["_demo_container"]
+    initial_manifest = at.session_state["_demo_manifest"]
+    old_growth = SQLiteGrowthRepository(str(previous.settings.DB_PATH))
+    create_backlog_hypothesis(old_growth, "Alteração durante apresentação")
+    assert len(old_growth.list_hypotheses()) == 19
+    open_page(at, "demo_data")
+    at.button(key="demo_restore").click().run()
+    assert_healthy(at)
+    restored = at.session_state["_demo_container"]
+    assert restored.settings.DB_PATH != previous.settings.DB_PATH
+    assert previous.settings.DB_PATH.exists()
+    assert at.session_state["_demo_manifest"] == initial_manifest
+    assert len(SQLiteGrowthRepository(str(restored.settings.DB_PATH)).list_hypotheses()) == 18
+    assert len(old_growth.list_hypotheses()) == 19
+    open_page(at, "demo_catalog")
+    assert len(at.dataframe[0].value) == 85
+    at.selectbox(key="demo_catalog_filter").set_value("SCALE").run()
+    assert_healthy(at)
+    assert set(at.dataframe[0].value["Cenário"]) == {"SCALE"}
+    assert len(restored.repository.list_rituals(limit=100)) == 12
+    assert not container_module.get_container().repository.list_rituals()
+
+
+def test_demo_failed_restore_keeps_previous_generation(ui, monkeypatch):
+    at, _ = ui
+    at.selectbox(key="studio_workspace").set_value("CDMS Demo").run()
+    at.button(key="demo_load").click().run()
+    assert_healthy(at)
+    previous = at.session_state["_demo_container"]
+    def fail_build(*args, **kwargs):
+        raise RuntimeError("Falha simulada de carregamento")
+    module = import_module("cdms.adapters.ui.studio_workspaces")
+    monkeypatch.setattr(module, "create_demo_bundle", fail_build)
+    at.button(key="demo_restore").click().run()
+    assert not at.exception
+    assert any("Falha simulada de carregamento" in item.value for item in at.error)
+    assert at.session_state["_demo_container"].settings.DB_PATH == previous.settings.DB_PATH
+    assert len(previous.repository.list_rituals(limit=100)) == 12
+
+
+def test_preselected_demo_context_can_return_to_clean_local(ui):
+    fresh = AppTest.from_file(str(APP), default_timeout=30)
+    fresh.session_state["studio_workspace"] = "CDMS Demo"
+    fresh.run()
+    assert_healthy(fresh)
+    assert fresh.session_state["_studio_active_workspace"] == "CDMS Demo"
+    fresh.session_state["val_reach"] = 1234
+    fresh.selectbox(key="studio_workspace").set_value("Local · CDMS").run()
+    assert_healthy(fresh)
+    assert "val_reach" not in fresh.session_state
+    assert fresh.session_state["_studio_active_workspace"] == "Local · CDMS"
