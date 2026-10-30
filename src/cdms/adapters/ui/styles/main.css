@@ -1,47 +1,11 @@
-/* CDMS Stylesheet v2.3.1 */
-.metric-card {
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    padding: 16px;
-    border-left: 4px solid #4a5568;
-    margin-bottom: 12px;
-}
-.metric-healthy {
-    border-left-color: #38a169;
-}
-.metric-below {
-    border-left-color: #e53e3e;
-}
-.metric-above {
-    border-left-color: #3182ce;
-}
-.metric-unavail {
-    border-left-color: #a0aec0;
-}
-.scenario-badge {
-    display: inline-block;
-    padding: 6px 12px;
-    font-weight: 700;
-    border-radius: 6px;
-    margin-bottom: 8px;
-}
-.badge-pre-drop {
-    background-color: #fed7d7;
-    color: #9b2c2c;
-}
-.badge-anomaly {
-    background-color: #feebc8;
-    color: #9c4221;
-}
-.badge-scale {
-    background-color: #c6f6d5;
-    color: #22543d;
-}
-.badge-stability {
-    background-color: #bee3f8;
-    color: #2a4365;
-}
-.badge-inconclusive {
-    background-color: #edf2f7;
-    color: #4a5568;
-}
+/* Legacy semantic cards inherit the active Decision Cockpit profile. */
+.metric-card { background: var(--studio-card); border-radius: 8px; padding: 16px; border-left: 3px solid var(--studio-cobalt); margin-bottom: 12px; }
+.metric-healthy, .metric-above { border-left-color: var(--studio-mint); }
+.metric-below { border-left-color: var(--studio-amber); }
+.metric-unavail { border-left-color: var(--studio-violet); }
+.scenario-badge { display: inline-block; padding: 6px 12px; font-weight: 600; border-radius: 5px; margin-bottom: 8px; background: var(--studio-card); }
+.badge-pre-drop { color: var(--studio-amber); }
+.badge-anomaly { color: var(--studio-coral); }
+.badge-scale { color: var(--studio-mint); }
+.badge-stability { color: var(--studio-cobalt); }
+.badge-inconclusive { color: var(--studio-violet); }

@@ -99,8 +99,9 @@ def render_learning(pending):
 
 def render_metrics(cycle, calibrations):
     with st.expander("Importar relatório da plataforma (CSV / XLSX)"):
+        scope = st.session_state.get("_studio_upload_scope", "local")
         report = st.file_uploader("Carregar relatório da plataforma", type=["csv", "xlsx", "xls"],
-                                  key=f"platform_file_uploader_{cycle}")
+                                  key=f"platform_file_uploader_{scope}_{cycle}")
         if report is not None:
             try:
                 parsed = PlatformMetricsParser.parse_file(report.getvalue(), report.name)

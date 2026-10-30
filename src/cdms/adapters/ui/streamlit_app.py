@@ -19,7 +19,7 @@ def load_css():
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 
-def run_app(*, embedded=False, section="ritual"):
+def run_app(*, embedded=False, section="ritual", container=None):
     if section not in {"ritual", "history", "export", "calibration"}:
         raise ValueError("Seção de governança desconhecida.")
     if not embedded:
@@ -30,7 +30,7 @@ def run_app(*, embedded=False, section="ritual"):
         )
     load_css()
 
-    container = get_container()
+    container = container or get_container()
     repo = container.repository
 
     # Persistência de Calibrações na Sessão
@@ -119,7 +119,7 @@ def run_app(*, embedded=False, section="ritual"):
     # TAB 3: EXPORTAÇÃO MARKDOWN
     # =========================================================
     if section == "export":
-        st.subheader("📄 Exportação do Relatório de Auditoria")
+        st.subheader("Relatório de auditoria")
         rituals = container.get_history_use_case.execute_list(limit=20)
         if not rituals:
             st.caption("Finalize ao menos um ritual para gerar exportações.")
@@ -148,7 +148,7 @@ def run_app(*, embedded=False, section="ritual"):
     # TAB 4: CALIBRAÇÃO & CONFIGURAÇÕES
     # =========================================================
     if section == "calibration":
-        st.subheader("⚙️ Configurações Operacionais de Referência")
+        st.subheader("Parâmetros de referência")
         current_calibs = st.session_state["active_calibs_list"]
         updated_calibs = render_calibration_editor(current_calibs)
 

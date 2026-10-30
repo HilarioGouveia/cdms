@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 import plotly.graph_objects as go
+from cdms.adapters.ui.theme import theme_tokens
 
 
 def create_funnel_cockpit_chart(
@@ -13,6 +14,8 @@ def create_funnel_cockpit_chart(
     p10_reference_conversions: float = None,
 ) -> go.Figure:
     """Renderiza funil com gradiente esmeralda, superfícies escuras e linhas P10/P90."""
+    palette = theme_tokens()
+    label_color = palette["background"] if palette["dark"] else palette["surface"]
     stages = ["1. Impressões", "2. Cliques (CTR)", "3. Leads (Opt-in)", "4. Vendas"]
     values = [impressions, clicks, leads, conversions]
 
@@ -22,22 +25,22 @@ def create_funnel_cockpit_chart(
             x=values,
             textinfo="value+percent previous",
             textposition="inside",
-            textfont=dict(family="JetBrains Mono, monospace", size=13, color="#F8FAFC"),
+            textfont=dict(family="JetBrains Mono, monospace", size=13, color=[palette["text"], label_color, label_color, label_color]),
             marker=dict(
-                color=["#1E293B", "#2563EB", "#0D9488", "#10B981"],
-                line=dict(width=1, color="rgba(255,255,255,0.15)"),
+                color=[palette["card"], palette["cobalt"], palette["mint"], palette["mint"]],
+                line=dict(width=1, color=palette["border"]),
             ),
-            connector=dict(line=dict(color="rgba(255,255,255,0.08)", width=1)),
+            connector=dict(line=dict(color=palette["border"], width=1)),
         )
     )
 
     fig.update_layout(
-        template="plotly_dark",
+        template="plotly_dark" if palette["dark"] else "plotly_white",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         margin=dict(l=20, r=20, t=25, b=25),
         height=320,
-        font=dict(family="Inter, sans-serif", color="#94A3B8"),
+        font=dict(family="Inter, sans-serif", color=palette["text"]),
         showlegend=False,
     )
 
@@ -45,22 +48,22 @@ def create_funnel_cockpit_chart(
         fig.add_hline(
             y=3,
             line_dash="dot",
-            line_color="#10B981",
+            line_color=palette["mint"],
             line_width=1.5,
             annotation_text=f"P90 Meta ({p90_reference_conversions:,.0f})",
             annotation_position="bottom right",
-            annotation_font=dict(family="JetBrains Mono", size=10, color="#10B981"),
+            annotation_font=dict(family="JetBrains Mono", size=10, color=palette["mint"]),
         )
 
     if p10_reference_conversions is not None:
         fig.add_hline(
             y=3,
             line_dash="dot",
-            line_color="#EF4444",
+            line_color=palette["coral"],
             line_width=1.5,
             annotation_text=f"P10 Piso ({p10_reference_conversions:,.0f})",
             annotation_position="bottom left",
-            annotation_font=dict(family="JetBrains Mono", size=10, color="#EF4444"),
+            annotation_font=dict(family="JetBrains Mono", size=10, color=palette["coral"]),
         )
 
     return fig

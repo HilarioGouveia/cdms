@@ -1,9 +1,6 @@
 [theme]
-base = "dark"
-primaryColor = "#3B82F6"               # Cobalto: ações de governança
-backgroundColor = "#0B0F17"            # Deep Obsidian / Carbon
-secondaryBackgroundColor = "#161F30"   # Slate Surface / Cards
-textColor = "#F1F5F9"                  # Alto contraste
+# Perfil alternativo: .streamlit/themes/soft-light.toml
+base = ".streamlit/themes/dark-premium.toml"
 font = "sans serif"
 baseFontSize = 14
 headingFontSizes = ["2.25rem", "1.7rem", "1.3rem", "1.15rem", "1rem", "0.9rem"]

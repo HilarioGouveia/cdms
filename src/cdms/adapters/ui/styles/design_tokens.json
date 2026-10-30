@@ -1,36 +1,98 @@
 {
   "themeName": "Decision Cockpit",
-  "version": "1.0.0",
-  "palette": {
-    "background": {
-      "obsidian": "#0B0F17",
-      "surface": "#161F30",
-      "surfaceHover": "#1E293B",
-      "surfaceElevated": "#243248"
+  "version": "2.0.0",
+  "defaultProfile": "dark-premium",
+  "sourceProfiles": ".streamlit/themes/*.toml",
+  "profiles": {
+    "dark-premium": {
+      "base": "dark",
+      "primaryColor": "#526B8E",
+      "backgroundColor": "#20242C",
+      "secondaryBackgroundColor": "#292E38",
+      "textColor": "#E7E9EC",
+      "borderColor": "#454C58",
+      "dataframeHeaderBackgroundColor": "#323844",
+      "dataframeHeaderTextColor": "#E7E9EC",
+      "blueColor": "#8EA8D0",
+      "blueTextColor": "#8EA8D0",
+      "blueBackgroundColor": "#2C3543",
+      "greenColor": "#91CDB5",
+      "greenTextColor": "#91CDB5",
+      "greenBackgroundColor": "#293B34",
+      "yellowColor": "#D6B477",
+      "yellowTextColor": "#D6B477",
+      "yellowBackgroundColor": "#3B352A",
+      "orangeColor": "#D6B477",
+      "orangeTextColor": "#D6B477",
+      "orangeBackgroundColor": "#3B352A",
+      "redColor": "#E49A8C",
+      "redTextColor": "#E49A8C",
+      "redBackgroundColor": "#402F30",
+      "violetColor": "#B9A8CE",
+      "violetTextColor": "#B9A8CE",
+      "violetBackgroundColor": "#342F40",
+      "grayColor": "#AEB4BE",
+      "grayTextColor": "#B9BEC6",
+      "grayBackgroundColor": "#323844",
+      "linkColor": "#A8BCDA",
+      "codeTextColor": "#91CDB5",
+      "codeBackgroundColor": "#292E38",
+      "baseRadius": "0.5rem",
+      "buttonRadius": "0.375rem",
+      "showWidgetBorder": true,
+      "dataframeBorderColor": "#454C58",
+      "chartCategoricalColors": [
+        "#8EA8D0",
+        "#91CDB5",
+        "#D6B477",
+        "#B9A8CE",
+        "#E49A8C"
+      ]
     },
-    "brand": {
-      "cdmsCobalt": "#3B82F6",
-      "cgsEmerald": "#10B981",
-      "cgsMintGlow": "rgba(16, 185, 129, 0.15)"
-    },
-    "status": {
-      "criticalCoral": "#EF4444",
-      "criticalCoralGlow": "rgba(239, 68, 68, 0.18)",
-      "warningAmber": "#F59E0B",
-      "warningAmberGlow": "rgba(245, 158, 11, 0.15)",
-      "infoSky": "#0EA5E9",
-      "neutralSlate": "#64748B"
-    },
-    "text": {
-      "primary": "#F1F5F9",
-      "secondary": "#94A3B8",
-      "muted": "#64748B",
-      "inverse": "#0B0F17"
-    },
-    "border": {
-      "subtle": "rgba(255, 255, 255, 0.08)",
-      "focused": "#3B82F6",
-      "activeGreen": "#10B981"
+    "soft-light": {
+      "base": "light",
+      "primaryColor": "#405D87",
+      "backgroundColor": "#F2F3F1",
+      "secondaryBackgroundColor": "#FAFAF8",
+      "textColor": "#252B33",
+      "borderColor": "#C8CECA",
+      "dataframeHeaderBackgroundColor": "#E8EBE8",
+      "dataframeHeaderTextColor": "#252B33",
+      "blueColor": "#405D87",
+      "blueTextColor": "#405D87",
+      "blueBackgroundColor": "#E2E8EF",
+      "greenColor": "#246B54",
+      "greenTextColor": "#246B54",
+      "greenBackgroundColor": "#DDEBE4",
+      "yellowColor": "#805C24",
+      "yellowTextColor": "#805C24",
+      "yellowBackgroundColor": "#F0E7D6",
+      "orangeColor": "#805C24",
+      "orangeTextColor": "#805C24",
+      "orangeBackgroundColor": "#F0E7D6",
+      "redColor": "#A94738",
+      "redTextColor": "#A94738",
+      "redBackgroundColor": "#F3E1DB",
+      "violetColor": "#6C5283",
+      "violetTextColor": "#6C5283",
+      "violetBackgroundColor": "#EAE3F0",
+      "grayColor": "#59635F",
+      "grayTextColor": "#59635F",
+      "grayBackgroundColor": "#E8EBE8",
+      "linkColor": "#405D87",
+      "codeTextColor": "#246B54",
+      "codeBackgroundColor": "#E8EBE8",
+      "baseRadius": "0.5rem",
+      "buttonRadius": "0.375rem",
+      "showWidgetBorder": true,
+      "dataframeBorderColor": "#C8CECA",
+      "chartCategoricalColors": [
+        "#405D87",
+        "#246B54",
+        "#805C24",
+        "#6C5283",
+        "#A94738"
+      ]
     }
   },
   "typography": {
@@ -45,10 +107,5 @@
     "md": "10px",
     "lg": "14px",
     "pill": "9999px"
-  },
-  "shadows": {
-    "card": "0 4px 20px -2px rgba(0, 0, 0, 0.5)",
-    "glowEmerald": "0 0 15px rgba(16, 185, 129, 0.25)",
-    "glowCoral": "0 0 15px rgba(239, 68, 68, 0.25)"
   }
 }

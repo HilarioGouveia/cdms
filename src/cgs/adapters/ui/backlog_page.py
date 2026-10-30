@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import streamlit as st
+from cdms.adapters.ui.components.identity import render_tag
 
 from cgs.application.use_cases.manage_hypotheses import ManageHypothesesUseCase
 from cgs.application.use_cases.prepare_cdms_proposal import PrepareCDMSProposalUseCase
@@ -74,7 +75,11 @@ def render_details(hypothesis):
 
 def render_heading(hypothesis):
     st.markdown(f"**{hypothesis.action_description}**")
-    st.caption(f"#{hypothesis.id} · {hypothesis.tested_variable.value} · ICE {hypothesis.ice_score}")
+    with st.container(horizontal=True):
+        tone = {"HOOK": "violet", "OFFER": "amber", "CTA": "cobalt"}.get(hypothesis.tested_variable.value, "neutral")
+        render_tag(hypothesis.tested_variable.value.replace("_", " "), tone)
+        render_tag(f"ICE {hypothesis.ice_score}")
+    st.caption(f"Hipótese #{hypothesis.id}")
     st.write(f"**Meta:** {hypothesis.target_metric_key} {comparison(hypothesis)} {hypothesis.success_metric_target}{hypothesis.target_metric_unit}")
 
 
@@ -148,7 +153,7 @@ def render_active(use_case, core):
     if not hypotheses:
         st.info("Nenhum experimento em teste no momento.")
     for hypothesis in hypotheses:
-        with st.container(border=True):
+        with st.container(border=True, key=f"growth_hypothesis_{hypothesis.status.value}_{hypothesis.id}"):
             render_heading(hypothesis)
             st.caption(f"Em teste · ciclo {hypothesis.target_cycle_id or 'não informado'}")
             record = core.get_ritual_by_cycle(hypothesis.target_cycle_id) if hypothesis.target_cycle_id else None
@@ -187,7 +192,7 @@ def render_history(use_case, core):
     if not completed and not discarded:
         st.info("Nenhum experimento encerrado até o momento.")
     for hypothesis in [*completed, *discarded]:
-        with st.container(border=True):
+        with st.container(border=True, key=f"growth_hypothesis_{hypothesis.status.value}_{hypothesis.id}"):
             render_heading(hypothesis)
             status = "Concluído" if hypothesis.status == HypothesisStatus.COMPLETED else "Descartado"
             st.caption(f"{status} · ciclo {hypothesis.target_cycle_id or 'não informado'}")

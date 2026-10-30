@@ -7,18 +7,16 @@
 .stMainBlockContainer:has(.st-key-studio_titlebar) > div { gap: 0; }
 .st-key-studio_titlebar {
     padding: 8px 16px;
-    background: #101722;
-    border-bottom: 1px solid #283549;
+    background: var(--studio-surface);
+    border-bottom: 1px solid var(--studio-border);
     align-items: center;
     min-height: 56px;
 }
 .st-key-studio_titlebar p, .st-key-studio_statusbar p { margin: 0; }
-.st-key-studio_workspace { min-height: calc(100dvh - 84px); }
 .st-key-studio_dock {
     padding: 12px 4px;
-    background: #101722;
-    border-right: 1px solid #283549;
-    min-height: calc(100dvh - 84px);
+    background: var(--studio-surface);
+    border-right: 1px solid var(--studio-border);
     gap: 8px;
 }
 .st-key-studio_dock button { min-height: 44px; padding: 8px; border-radius: 0; border: 0; }
@@ -27,70 +25,282 @@
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
 .st-key-studio_explorer_panel, .st-key-studio_evidence_panel {
-    background: #161f30;
+    background: var(--studio-surface);
     padding: 20px 16px;
-    min-height: calc(100dvh - 84px);
     border-radius: 0;
 }
-.st-key-studio_explorer_panel { border-right: 1px solid #283549; }
-.st-key-studio_evidence_panel { border-left: 1px solid #283549; padding: 20px; }
+.st-key-studio_explorer_panel { border-right: 1px solid var(--studio-border); }
+.st-key-studio_evidence_panel { border-left: 1px solid var(--studio-border); padding: 20px; }
 .st-key-studio_explorer_panel button { justify-content: flex-start; text-align: left; }
 .st-key-studio_explorer_panel h3, .st-key-studio_evidence_panel h3 {
     font-size: 1.15rem; line-height: 1.4;
 }
-.st-key-studio_editor { padding: 20px 28px; min-height: calc(100dvh - 84px); }
+.st-key-studio_editor { padding: 20px 28px; }
 .st-key-studio_editor h1 { font-size: clamp(26px, 2.6vw, 38px); font-weight: 600; letter-spacing: -0.7px; }
 .st-key-studio_editor h3 { font-size: 1.3rem; }
-.st-key-studio_opportunity { border-left: 3px solid #6ee7b7; }
+.st-key-studio_opportunity { border-left: 3px solid var(--studio-mint); }
 .st-key-studio_opportunity [data-testid="stMetricValue"] {
-    color: #6ee7b7; font-variant-numeric: tabular-nums;
+    color: var(--studio-mint); font-variant-numeric: tabular-nums;
+}
+.st-key-studio_mobile_tools { display: none; }
+
+/* The shell owns the viewport. Only individual panes scroll. */
+.stApp:has(.st-key-studio_titlebar) {
+    --studio-status-background: var(--studio-surface);
+}
+.stMainBlockContainer:has(.st-key-studio_titlebar) {
+    height: 100dvh; overflow: hidden;
+}
+.stMainBlockContainer:has(.st-key-studio_titlebar) > div {
+    height: 100%; min-height: 0; gap: 0;
+}
+.st-key-studio_titlebar { flex: 0 0 auto; }
+.st-key-studio_workbench {
+    flex: 1 1 0; min-height: 0; overflow: hidden;
+}
+.st-key-studio_workbench > div > [data-testid="stHorizontalBlock"] {
+    height: 100%; min-height: 0; align-items: stretch;
+}
+.st-key-studio_workbench > div > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+    height: 100%; min-height: 0; min-width: 0;
+}
+.st-key-studio_dock, .st-key-studio_explorer_panel,
+.st-key-studio_editor, .st-key-studio_evidence_panel {
+    height: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden;
+    overscroll-behavior-y: contain; scrollbar-width: thin;
+    scrollbar-gutter: stable;
 }
 .st-key-studio_statusbar {
-    background: #162c4d; border-top: 1px solid #283549;
-    padding: 3px 14px; min-height: 28px;
+    flex: 0 0 28px; height: 28px; min-height: 28px; padding: 0 12px;
+    background: var(--studio-status-background); color: currentColor;
+    border-top: 1px solid var(--studio-border); gap: 0;
 }
-.st-key-studio_statusbar p { font-size: 12px; }
-.st-key-studio_mobile_tools { display: none; }
-/* Focused mobile flows: hide side panes, retain menus and the dock. */
+.studio-status {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center; gap: 16px; height: 27px;
+    font-size: 12px; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.studio-status > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.studio-status-context { text-align: right; }
+/* Every module uses the same compact shell on narrow screens. */
 @media (max-width: 900px) {
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_toggle_explorer,
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_toggle_evidence { display: none; }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_mobile_tools { display: flex; }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_explorer_panel),
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_evidence_panel) {
-        display: none;
+    .st-key-studio_toggle_explorer, .st-key-studio_toggle_evidence { display: none; }
+    .st-key-studio_mobile_tools { display: flex; }
+    .st-key-studio_titlebar { flex-wrap: wrap; padding: 8px; gap: 8px; }
+    .st-key-studio_titlebar [data-testid="stCaptionContainer"] { display: none; }
+    .st-key-studio_workbench > div > [data-testid="stHorizontalBlock"] {
+        flex-direction: column; flex-wrap: nowrap;
     }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"] .st-key-studio_dock) {
-        flex-direction: column;
+    .st-key-studio_workbench > div > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-studio_explorer_panel),
+    .st-key-studio_workbench > div > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-studio_evidence_panel) { display: none; }
+    .st-key-studio_workbench > div > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-studio_dock) {
+        flex: 0 0 auto !important; height: auto; width: 100% !important;
     }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_editor),
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_workspace [data-testid="stColumn"]:has(.st-key-studio_dock),
-    .st-key-ritual_wizard [data-testid="stHorizontalBlock"] > [data-testid="stColumn"], .st-key-growth_funnel [data-testid="stHorizontalBlock"] > [data-testid="stColumn"], .st-key-growth_backlog [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-        flex: 1 1 100% !important;
-        width: 100% !important;
-        min-width: 0 !important;
+    .st-key-studio_workbench > div > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:has(.st-key-studio_editor) {
+        flex: 1 1 0 !important; height: 0; width: 100% !important;
     }
-    .st-key-ritual_steps { display: none; }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_dock {
-        min-height: auto; flex-direction: row; flex-wrap: wrap; border-right: 0;
+    .st-key-studio_dock {
+        height: auto; padding: 4px; flex-direction: row; flex-wrap: wrap;
+        border-right: 0; border-bottom: 1px solid var(--studio-border);
+        overflow: visible; scrollbar-gutter: auto;
     }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_dock > div {
-        flex: 1 1 44px; width: auto;
-    }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_dock button [data-testid="stMarkdownContainer"] {
-        position: static; width: auto; height: auto; clip-path: none;
-    }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_titlebar [data-testid="stCaptionContainer"] { display: none; }
-    .stApp:has(:is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog)) .st-key-studio_editor { min-width: 0; padding: 16px; }
-    .st-key-ritual_navigation button { min-height: 44px; }
-}
-@media (max-width: 640px) {
-    .st-key-studio_dock { min-height: auto; flex-direction: row; flex-wrap: wrap; border-right: 0; }
     .st-key-studio_dock > div { flex: 1 1 44px; width: auto; }
-    .st-key-studio_explorer_panel, .st-key-studio_evidence_panel,
-    .st-key-studio_editor { min-height: auto; padding: 16px; }
-    .st-key-studio_titlebar { flex-wrap: wrap; }
     .st-key-studio_dock button [data-testid="stMarkdownContainer"] {
         position: static; width: auto; height: auto; clip-path: none;
     }
+    .st-key-studio_editor { padding: 16px; }
+    .st-key-ritual_steps { display: none; }
+    .st-key-ritual_navigation button { min-height: 44px; }
+    .st-key-ritual_wizard [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+    .st-key-growth_funnel [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+    .st-key-growth_backlog [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        flex: 1 1 100% !important; width: 100% !important; min-width: 0 !important;
+    }
+    .studio-status { grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; }
+    .studio-status-telemetry, .studio-status-cycle { display: none; }
+    .studio-status-execution { text-align: center; }
+}
+@media (max-width: 480px) {
+    .st-key-studio_statusbar { flex-basis: 48px; height: 48px; min-height: 48px; padding: 2px 8px; }
+    .studio-status { height: 43px; grid-template-columns: auto 1fr; grid-template-rows: 1fr 1fr; gap: 0 8px; }
+    .studio-status-context { grid-column: 1 / -1; text-align: left; }
+    .studio-status-execution { text-align: right; }
+}
+
+/* Streamlit wraps each block; propagate flex sizing through those wrappers. */
+.stMainBlockContainer:has(.st-key-studio_titlebar) > div > div:has(> .st-key-studio_titlebar),
+.stMainBlockContainer:has(.st-key-studio_titlebar) > div > div:has(> .st-key-studio_statusbar) {
+    flex: 0 0 auto;
+}
+.stMainBlockContainer:has(.st-key-studio_titlebar) > div > div:has(> .st-key-studio_workbench) {
+    flex: 1 1 0; min-height: 0; display: flex;
+}
+.st-key-studio_workbench { height: 100%; }
+.st-key-studio_workbench > div,
+.st-key-studio_workbench > div > [data-testid="stHorizontalBlock"] {
+    height: 100%; min-height: 0;
+}
+.st-key-studio_workbench > div > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+.st-key-studio_workbench > div > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] > div {
+    height: 100%; min-height: 0; min-width: 0;
+}
+
+/* Stretch the wrapper of each scroll pane as well as the pane itself. */
+.st-key-studio_workbench [data-testid="stColumn"] > div > div:has(> :is(.st-key-studio_editor, .st-key-studio_dock, .st-key-studio_explorer_panel, .st-key-studio_evidence_panel)) {
+    flex: 1 1 0; min-height: 0;
+}
+@media (max-width: 900px) {
+    .st-key-studio_workbench [data-testid="stColumn"] > div > div:has(> .st-key-studio_dock) { flex: 0 0 auto; }
+}
+
+/* Decision Cockpit: editorial hierarchy, financial emphasis, restrained color. */
+.stApp:has(.st-key-studio_titlebar) {
+    --cockpit-mint: var(--studio-mint);
+    --cockpit-amber: var(--studio-amber);
+    --cockpit-coral: var(--studio-coral);
+    --cockpit-violet: var(--studio-violet);
+}
+.st-key-cockpit_overview { gap: 22px; max-width: 1080px; margin-inline: auto; }
+.st-key-cockpit_overview h1 {
+    font-size: clamp(26px, 2.7vw, 38px); letter-spacing: -1px;
+    line-height: 1.15; padding-bottom: 4px;
+}
+.st-key-cockpit_overview [data-testid="stCaptionContainer"] { letter-spacing: .025em; }
+.st-key-cockpit_context { gap: 8px; padding-bottom: 4px; }
+.st-key-cockpit_overview .st-key-studio_opportunity {
+    padding: 24px; border: 1px solid color-mix(in srgb, var(--cockpit-mint) 28%, transparent);
+    border-left: 3px solid var(--cockpit-mint); border-radius: 10px;
+    background: linear-gradient(115deg, color-mix(in srgb, var(--cockpit-mint) 9%, transparent), transparent 80%);
+    gap: 14px;
+}
+.st-key-cockpit_overview .st-key-studio_opportunity [data-testid="stMetricValue"] {
+    font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+    font-size: clamp(30px, 3.4vw, 46px); font-weight: 500; letter-spacing: -1.5px;
+    color: var(--cockpit-mint); font-variant-numeric: tabular-nums;
+}
+.st-key-cockpit_decision, .st-key-cockpit_backlog {
+    padding: 22px 0 4px; border-top: 1px solid var(--studio-border); gap: 14px;
+}
+.st-key-cockpit_overview h3 { font-size: 1.2rem; line-height: 1.45; font-weight: 600; }
+.st-key-cockpit_criterion {
+    padding: 12px 16px; border-left: 2px solid color-mix(in srgb, var(--studio-primary) 60%, transparent);
+    background: color-mix(in srgb, var(--studio-primary) 5%, transparent); gap: 6px;
+}
+.st-key-cockpit_backlog [class*="st-key-cockpit_hypothesis_"] {
+    padding: 16px; border-radius: 8px;
+    background: color-mix(in srgb, currentColor 3%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 8%, transparent); gap: 8px;
+}
+.cockpit-tag {
+    display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 5px;
+    font-size: 11px; font-weight: 600; line-height: 1.5; letter-spacing: .035em;
+    border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    background: color-mix(in srgb, currentColor 5%, transparent);
+    font-variant-numeric: tabular-nums;
+}
+.cockpit-tag-neutral { color: inherit; }
+.cockpit-tag-mint { color: var(--cockpit-mint); }
+.cockpit-tag-amber { color: var(--cockpit-amber); }
+.cockpit-tag-coral { color: var(--cockpit-coral); }
+.cockpit-tag-violet { color: var(--cockpit-violet); }
+.cockpit-tag-cobalt { color: var(--studio-cobalt); }
+.stApp:has(.st-key-studio_titlebar) :is(.st-key-studio_dock, .st-key-studio_explorer_panel) button[kind="primary"] {
+    background: color-mix(in srgb, var(--studio-primary) 12%, var(--studio-surface));
+    color: inherit; border-left: 2px solid var(--studio-primary); box-shadow: none;
+}
+.stApp:has(.st-key-studio_titlebar) .st-key-studio_evidence_panel {
+    background: color-mix(in srgb, var(--studio-surface) 60%, var(--studio-background));
+}
+@media (max-width: 900px) {
+    .st-key-cockpit_overview .st-key-studio_opportunity { padding: 18px 16px; }
+    .st-key-cockpit_overview { gap: 18px; }
+    .st-key-cockpit_overview .st-key-studio_opportunity [data-testid="stMetricValue"] {
+        font-size: clamp(25px, 7vw, 38px); letter-spacing: -1px;
+    }
+}
+
+@media (max-width: 480px) {
+    .stApp:has(.st-key-studio_titlebar) .st-key-studio_dock button [data-testid="stMarkdownContainer"] {
+        position: absolute; width: 1px; height: 1px;
+        overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+    }
+}
+
+/* Shared identity across governance, experiments, reports and demo pages. */
+.st-key-studio_page_heading {
+    padding-bottom: 18px; margin-bottom: 10px;
+    border-bottom: 1px solid var(--studio-border); gap: 6px;
+}
+.st-key-studio_page_heading h3 { font-size: clamp(22px, 2vw, 28px); letter-spacing: -.5px; }
+.st-key-studio_editor :is(.st-key-ritual_screen, .st-key-growth_funnel, .st-key-growth_backlog) { gap: 18px; }
+.st-key-studio_editor [data-testid="stMetricValue"] {
+    font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+    font-variant-numeric: tabular-nums; font-weight: 500;
+}
+.st-key-studio_editor [data-testid="stMetric"] { padding: 10px 0; }
+.st-key-studio_editor [role="tablist"] { gap: 20px; border-bottom: 1px solid var(--studio-border); }
+.st-key-studio_editor [role="tab"] { padding-inline: 0; font-size: 13px; }
+.st-key-studio_editor [role="tab"][aria-selected="true"] { color: var(--studio-cobalt); }
+.st-key-studio_editor [data-testid="stExpander"] {
+    border-color: var(--studio-border); border-radius: 8px;
+    background: color-mix(in srgb, currentColor 2%, transparent);
+}
+.st-key-studio_editor [class*="st-key-growth_hypothesis_"],
+.st-key-studio_editor .st-key-baseline_form {
+    border-color: var(--studio-border); border-radius: 8px;
+    background: color-mix(in srgb, currentColor 3%, transparent);
+    box-shadow: none;
+}
+.st-key-growth_diagnosis_summary {
+    padding: 14px 16px; border-left: 2px solid var(--studio-cobalt);
+    background: color-mix(in srgb, var(--studio-cobalt) 5%, transparent); gap: 6px;
+}
+.st-key-growth_opportunity {
+    border: 1px solid color-mix(in srgb, var(--studio-mint) 28%, transparent);
+    border-left: 3px solid var(--studio-mint); border-radius: 10px; padding: 20px;
+    background: linear-gradient(115deg, color-mix(in srgb, var(--studio-mint) 9%, transparent), transparent 80%);
+    gap: 8px;
+}
+.st-key-growth_opportunity [data-testid="stMetricValue"] {
+    color: var(--studio-mint); font-size: clamp(28px, 3vw, 40px); letter-spacing: -1px;
+}
+.st-key-ritual_navigation { border-top: 1px solid var(--studio-border); padding-top: 12px; }
+.st-key-studio_editor :is(input, textarea) { font-variant-numeric: tabular-nums; }
+.st-key-studio_editor [data-testid="stAlert"] { border-radius: 8px; }
+@media (max-width: 900px) {
+    .st-key-studio_page_heading { padding-bottom: 14px; }
+    .st-key-growth_opportunity { padding: 16px; }
+    .st-key-growth_opportunity [data-testid="stMetricValue"] { font-size: clamp(24px, 7vw, 34px); }
+}
+
+.st-key-growth_baseline_reference {
+    padding: 12px 16px; border-left: 2px solid var(--studio-cobalt);
+    background: color-mix(in srgb, var(--studio-cobalt) 5%, transparent); gap: 6px;
+}
+
+/* Evidence-backed storytelling shares the Cockpit hierarchy. */
+.st-key-cycle_story { gap: 18px; }
+.st-key-story_block_0, .st-key-story_block_1, .st-key-story_block_2 {
+    padding: 16px 18px; border-left: 2px solid var(--studio-cobalt);
+    background: color-mix(in srgb, currentColor 3%, transparent); gap: 8px;
+}
+.st-key-story_block_0 { border-left-color: var(--studio-amber); }
+.st-key-story_block_2 { border-left-color: var(--studio-violet); }
+.st-key-cycle_story h3 { font-size: 1.15rem; }
+
+/* Calm, neutral surfaces; cobalt is an accent rather than a saturated fill. */
+.st-key-studio_editor :is(.st-key-cockpit_backlog [class*="st-key-cockpit_hypothesis_"], [class*="st-key-growth_hypothesis_"]) {
+    background: var(--studio-card);
+}
+.st-key-studio_editor button[kind="primary"] {
+    background: var(--studio-primary); color: white; border-color: var(--studio-primary);
+}
+.st-key-studio_editor button[kind="primary"]:hover {
+    filter: brightness(1.08);
+}
+.st-key-studio_editor [role="tab"][aria-selected="true"] { color: var(--studio-cobalt); }
+
+.stApp:has(.st-key-studio_titlebar) [data-testid="stCaptionContainer"],
+.stApp:has(.st-key-studio_titlebar) [data-testid="stCaptionContainer"] p {
+    color: var(--studio-muted);
 }

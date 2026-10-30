@@ -3,10 +3,12 @@
 import os
 from decimal import Decimal
 import streamlit as st
+from cdms.adapters.ui.theme import apply_shell_theme
 
 
 def load_cockpit_css():
     """Injeta a folha de estilos CSS personalizada no cabeçalho do Streamlit."""
+    apply_shell_theme()
     css_path = os.path.join(os.path.dirname(__file__), "../styles/cockpit_theme.css")
     if os.path.exists(css_path):
         with open(css_path, "r", encoding="utf-8") as f:
