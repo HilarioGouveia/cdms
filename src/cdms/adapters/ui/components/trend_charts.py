@@ -2,6 +2,7 @@
 from typing import List, Dict
 import pandas as pd
 import streamlit as st
+from cdms.adapters.ui.theme import theme_tokens
 
 
 def render_metric_trends(rituals: List, active_calibs: Dict):
@@ -10,6 +11,7 @@ def render_metric_trends(rituals: List, active_calibs: Dict):
         st.info("Nenhum histórico registado para exibir tendências.")
         return
 
+    palette = theme_tokens()
     ordered_rituals = sorted(rituals, key=lambda r: r.week_start)
 
     data = []
@@ -46,7 +48,7 @@ def render_metric_trends(rituals: List, active_calibs: Dict):
 
                 st.line_chart(
                     chart_df,
-                    color=["#29B5E8", "#FF4B4B", "#00FFAA"] if calib else ["#29B5E8"],
+                    color=[palette["cobalt"], palette["amber"], palette["mint"]] if calib else [palette["cobalt"]],
                     height=280
                 )
             else:

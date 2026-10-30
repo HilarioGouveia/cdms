@@ -119,7 +119,7 @@ def run_app(*, embedded=False, section="ritual", container=None):
     # TAB 3: EXPORTAÇÃO MARKDOWN
     # =========================================================
     if section == "export":
-        st.subheader("📄 Exportação do Relatório de Auditoria")
+        st.subheader("Relatório de auditoria")
         rituals = container.get_history_use_case.execute_list(limit=20)
         if not rituals:
             st.caption("Finalize ao menos um ritual para gerar exportações.")
@@ -148,7 +148,7 @@ def run_app(*, embedded=False, section="ritual", container=None):
     # TAB 4: CALIBRAÇÃO & CONFIGURAÇÕES
     # =========================================================
     if section == "calibration":
-        st.subheader("⚙️ Configurações Operacionais de Referência")
+        st.subheader("Parâmetros de referência")
         current_calibs = st.session_state["active_calibs_list"]
         updated_calibs = render_calibration_editor(current_calibs)
 

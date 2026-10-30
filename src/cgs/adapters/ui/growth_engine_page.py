@@ -3,6 +3,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 import streamlit as st
+from cdms.adapters.ui.components.identity import money
 
 from cgs.adapters.persistence.sqlite_growth_repo import SQLiteGrowthRepository
 from cdms.adapters.persistence.sqlite_repo import SQLiteRepository
@@ -38,12 +39,10 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db", *, section="diagnosi
                     else:
                         is_lead_funnel = active_baseline.conversion_type == ConversionType.LEAD
 
-                        funnel_badge = "Funil de 2 Passos (LEAD)" if is_lead_funnel else "Venda Direta (DIRECT_SALE)"
-                        st.info(
-                            f"Configuração Ativa: **{funnel_badge}** | "
-                            f"Ticket Médio: **R$ {active_baseline.ticket_price:,.2f}** | "
-                            f"CTR Meta: **{active_baseline.expected_ctr_pct}%**"
-                        )
+                        funnel_badge = "Captura e fechamento de leads" if is_lead_funnel else "Venda direta"
+                        with st.container(key="growth_baseline_reference"):
+                            st.caption("BASELINE ATIVA")
+                            st.write(f"**{funnel_badge}** · Ticket {money(active_baseline.ticket_price)} · CTR de referência {active_baseline.expected_ctr_pct}%")
 
                         col1, col2, col3 = st.columns(3)
                         source_cycle = col1.date_input("Segunda-feira de Referência", value=date.today() - timedelta(days=date.today().weekday() + 7), key="growth_source_cycle")
@@ -74,7 +73,9 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db", *, section="diagnosi
                         audit = repo.get_funnel_audit(source_cycle.isoformat())
                         if audit is not None:
                             st.caption(f"Diagnóstico salvo · {source_cycle:%d/%m/%Y}. Execute novamente para atualizar com os valores dos campos.")
-                            st.success(audit.diagnosis_summary)
+                            with st.container(key="growth_diagnosis_summary"):
+                                st.caption("DIAGNÓSTICO PERSISTIDO")
+                                st.write(audit.diagnosis_summary)
 
                             if audit.leads_opportunity_reais is not None:
                                 m1, m2, m3, m4 = st.columns(4)
@@ -88,10 +89,13 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db", *, section="diagnosi
                                 m2.metric("Oportunidade Intenção", f"R$ {audit.intention_opportunity_reais:,.2f}")
                                 m3.metric("Oportunidade Conversão", f"R$ {audit.conversion_opportunity_reais:,.2f}")
 
-                            st.info(f"💰 Oportunidade Estimada Total Destravável: **R$ {audit.total_opportunity_reais:,.2f}**")
+                            with st.container(key="growth_opportunity"):
+                                st.caption("IMPACTO FINANCEIRO / ESTIMATIVA")
+                                st.metric("Oportunidade recuperável estimada", money(audit.total_opportunity_reais))
+                                st.caption("Estimativa frente à baseline; não representa receita realizada.")
             with history_tab:
                 if history_tab.open:
-                    st.subheader("📈 Histórico Acumulado de Oportunidade Desperdiçada")
+                    st.subheader("Histórico de oportunidade estimada")
 
                     audit_history = audit_uc.get_audit_history(limit=20)
                     if not audit_history:
@@ -252,15 +256,18 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db", *, section="diagnosi
     # ABA 4: Relatório Executivo Consolidado
     # =========================================================================
     if section == "report":
-        st.subheader("📑 Exportador de Relatório Executivo de Ciclo")
-        st.caption("Consolidação formal de auditoria de funil, governança de causalidade e decisões em Markdown.")
-
         all_audits = repo.list_funnel_audits(limit=50)
-        available_cycles = [a.source_cycle_id for a in all_audits]
+        available_cycles = sorted({a.source_cycle_id for a in all_audits} |
+                                  {r.cycle_id for r in core_repo.list_rituals(limit=500)}, reverse=True)
         today_iso = (date.today() - timedelta(days=date.today().weekday())).isoformat()
         if today_iso not in available_cycles:
             available_cycles.insert(0, today_iso)
 
+        reference = st.session_state.get("studio_cycle")
+        if reference and reference.isoformat() not in available_cycles:
+            available_cycles.insert(0, reference.isoformat())
+        if st.session_state.get("growth_selected_cycle") not in available_cycles:
+            st.session_state.pop("growth_selected_cycle", None)
         selected_cycle = st.selectbox(
             "Ciclo Alvo do Relatório",
             options=available_cycles,
@@ -269,21 +276,30 @@ def render_growth_engine(db_path: str = "data/cdms_dev.db", *, section="diagnosi
             key="growth_selected_cycle",
         )
 
-        report = export_uc.execute(cycle_id=selected_cycle)
-
-        col_rep1, col_rep2 = st.columns([3, 1])
-        col_rep1.info(
-            f"Relatório gerado para o ciclo **`{selected_cycle}`** contendo "
-            f"**{report.hypotheses_count}** experimento(s) associado(s)."
+        story_tab, technical_tab = st.tabs(
+            ["Storytelling", "Relatório consolidado"], key="growth_report_tab", on_change="rerun",
         )
-        col_rep2.download_button(
-            label="⬇️ Baixar Relatório (.md)",
-            data=report.markdown_content,
-            file_name=f"relatorio_ciclo_{selected_cycle}.md",
-            mime="text/markdown",
-            type="primary",
-            width="stretch",
-        )
+        with story_tab:
+            if story_tab.open:
+                from cdms.adapters.ui.components.storytelling import render_cycle_story
+                render_cycle_story(core_repo, repo, selected_cycle)
+        with technical_tab:
+            if technical_tab.open:
+                report = export_uc.execute(cycle_id=selected_cycle)
 
-        with st.expander("👁️ Pré-visualização do Relatório Markdown", expanded=True):
-            st.markdown(report.markdown_content)
+                col_rep1, col_rep2 = st.columns([3, 1])
+                col_rep1.info(
+                    f"Relatório gerado para o ciclo **`{selected_cycle}`** contendo "
+                    f"**{report.hypotheses_count}** experimento(s) associado(s)."
+                )
+                col_rep2.download_button(
+                    label="⬇️ Baixar Relatório (.md)",
+                    data=report.markdown_content,
+                    file_name=f"relatorio_ciclo_{selected_cycle}.md",
+                    mime="text/markdown",
+                    type="primary",
+                    width="stretch",
+                )
+
+                with st.expander("👁️ Pré-visualização do Relatório Markdown", expanded=True):
+                    st.markdown(report.markdown_content)

@@ -74,7 +74,7 @@ def test_navigation_and_calibrated_ritual(ui, conversion_type):
     at.button(key="studio_nav_Experimentos").click().run()
     assert_healthy(at)
     assert not at.title
-    assert any("Experimentos / Diagnóstico do funil" in item.value for item in at.markdown)
+    assert any("Diagnóstico do funil" == item.value for item in at.subheader)
     open_page(at, "baseline")
     widget(at.selectbox, "Tipo de Conversão Comercial").set_value(conversion_type).run()
     assert_healthy(at)
@@ -156,6 +156,8 @@ def test_growth_proposal_ritual_and_audited_outcome(ui, outcome, expected_status
     assert any("Resultado auditado" in item.value for item in at.markdown)
     assert any("CTR medido na plataforma após sete dias" in item.value for item in at.markdown)
     open_page(at, "report")
+    at.session_state["growth_report_tab"] = "Relatório consolidado"
+    at.run()
     widget(at.selectbox, "Ciclo Alvo do Relatório").set_value("2026-11-02").run()
     assert_healthy(at)
     assert any(expected_status in element.value for element in at.markdown)
@@ -215,7 +217,7 @@ def test_studio_preserves_ritual_draft_and_panel_toggles(ui):
     at.text_input(key="dec_summary").set_value("Rascunho do próximo teste").run()
     at.button(key="studio_nav_Cockpit").click().run()
     assert_healthy(at)
-    assert any("Uma decisão de cada vez" in title.value for title in at.title)
+    assert any("Decision Cockpit" == title.value for title in at.title)
     at.button(key="studio_toggle_explorer").click().run()
     at.button(key="studio_toggle_evidence").click().run()
     assert not at.session_state["studio_evidence"]
@@ -517,7 +519,7 @@ def test_demo_workspace_load_and_switch_keep_local_data_and_drafts(ui):
     at.button(key="demo_present_cycle").click().run()
     assert_healthy(at)
     assert at.metric
-    assert any("DADOS SIMULADOS" in item.value for item in at.caption)
+    assert any("DADOS SIMULADOS" in item.value for item in at.markdown)
     at.button(key="studio_nav_Governança").click().run()
     ritual_step(at, 4)
     at.text_input(key="dec_summary").set_value("Rascunho simulado").run()
@@ -589,3 +591,20 @@ def test_preselected_demo_context_can_return_to_clean_local(ui):
     assert_healthy(fresh)
     assert "val_reach" not in fresh.session_state
     assert fresh.session_state["_studio_active_workspace"] == "Local · CDMS"
+
+
+def test_storytelling_is_read_only_and_cockpit_link_keeps_cycle(ui):
+    at, db_path = ui
+    at.button(key="studio_nav_Cockpit").click().run()
+    cycle = at.session_state["studio_cycle"].isoformat()
+    at.button(key="cockpit_open_story").click().run()
+    assert_healthy(at)
+    assert at.selectbox(key="growth_selected_cycle").value == cycle
+    assert [tab.label for tab in at.tabs] == ["Storytelling", "Relatório consolidado"]
+    assert any("Não há decisão registrada" in text.value for text in at.markdown)
+    assert any("Sem resultado auditado" in text.value for text in at.markdown)
+    at.selectbox(key="growth_story_audience").set_value("Comunicação").run()
+    assert_healthy(at)
+    assert any("Sem valores financeiros" in text.value for text in at.caption)
+    assert not SQLiteGrowthRepository(str(db_path)).list_funnel_audits()
+    assert not container_module.get_container().repository.list_rituals()
