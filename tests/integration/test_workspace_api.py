@@ -221,7 +221,7 @@ def test_ritual_and_linked_hypothesis_lifecycle_are_isolated(api):
 
 @pytest.mark.parametrize("endpoint,payload", [
     ("/growth-v2/allocate-budget", {"hypothesis_id": 1, "cycle_id": "2026-10-19", "amount_reais": 100}),
-    ("/growth-v2/evaluate-statistical-significance", {"hypothesis_id": 1, "control_conversions": 10, "control_sample": 100,
+    ("/growth-v2/evaluate-statistical-significance", {"hypothesis_id": 1, "cycle_id": "2026-10-19", "control_conversions": 10, "control_sample": 100,
                                                   "treatment_conversions": 20, "treatment_sample": 100}),
     ("/growth-v3/optimize-traffic", {"hypothesis_id": 1, "cycle_id": "2026-10-19", "arms": [], "current_cpa_reais": 10,
                                    "current_spend_reais": 10, "max_budget_reais": 100}),
@@ -318,7 +318,7 @@ def test_all_business_routes_require_authentication_and_viewer_cannot_write(api)
 def test_statistics_and_optimization_use_workspace_store(api):
     ha, hb = api.login(), api.login("bob")
     create_hypothesis(api, ha)
-    stats = {"hypothesis_id": 1, "control_conversions": 10, "control_sample": 200,
+    stats = {"hypothesis_id": 1, "cycle_id": "2026-10-19", "control_conversions": 10, "control_sample": 200,
              "treatment_conversions": 20, "treatment_sample": 200}
     response = api.client.post(PREFIX + "/growth-v2/evaluate-statistical-significance", json=stats, headers=ha)
     assert response.status_code == 200, response.text
@@ -342,3 +342,62 @@ def test_inactive_owner_cannot_be_removed_or_demoted_by_admin(api):
     url = PREFIX + f"/workspaces/current/members/{owner_id}"
     assert api.client.delete(url, headers=headers).status_code == 403
     assert api.client.put(url, json={"role": "MEMBER"}, headers=headers).status_code == 403
+
+
+def test_create_temporary_user_requires_password_change_before_workspace_access(api):
+    headers = api.login()
+    path = PREFIX + '/workspaces/current/members'
+    payload = dict(email='new@example.com', full_name='Nova pessoa', role='ADMIN',
+                   temporary_password='Temporary-password-123')
+    response = api.client.post(path, json=payload, headers=headers)
+    assert response.status_code == 201, response.text
+    assert response.json() == {'created': True}
+    user = api.identity.get_user_by_email(payload['email'])
+    assert user['must_change_password'] == 1
+    login_payload = dict(email=payload['email'], password=payload['temporary_password'], workspace_id=api.wa)
+    token = api.client.post(PREFIX + '/auth/login', json=login_payload).json()['access_token']
+    temporary_headers = {'Authorization': 'Bearer ' + token}
+    assert api.client.get(PREFIX + '/workspaces/current', headers=temporary_headers).status_code == 403
+    response = api.client.post(PREFIX + '/auth/password', headers=temporary_headers,
+                               json=dict(current_password=payload['temporary_password'], new_password='My-permanent-password-456'))
+    assert response.status_code == 204, response.text
+    assert api.identity.get_user(user['id'])['must_change_password'] == 0
+    assert api.client.get(PREFIX + '/workspaces/current', headers=temporary_headers).status_code == 401
+    login_payload['password'] = 'My-permanent-password-456'
+    new_token = api.client.post(PREFIX + '/auth/login', json=login_payload).json()['access_token']
+    assert api.client.get(PREFIX + '/workspaces/current', headers={'Authorization': 'Bearer ' + new_token}).status_code == 200
+
+
+def test_registration_and_password_reset_respect_workspace_permissions(api):
+    owner, admin = api.login(), api.login('admin')
+    path = PREFIX + '/workspaces/current/members'
+    own_url = path + f"/{api.users['admin']['id']}"
+    assert api.client.put(own_url, headers=admin, json={'role': 'MEMBER'}).status_code == 403
+    assert api.client.delete(own_url, headers=admin).status_code == 403
+    payload = dict(email='new@example.com', full_name='Nova pessoa', role='ADMIN', temporary_password='temporary-password-123')
+    assert api.client.post(path, headers=admin, json=payload).status_code == 400
+    payload['role'] = 'OWNER'
+    assert api.client.post(path, headers=owner, json=payload).status_code == 400
+    reset = dict(temporary_password='reset-password-123')
+    for target in ('alice', 'admin', 'bob'):
+        response = api.client.post(path + f"/{api.users[target]['id']}/password", headers=admin, json=reset)
+        assert response.status_code == 400
+    old = api.login('member')
+    uid = api.users['member']['id']
+    assert api.client.post(path + f'/{uid}/password', headers=owner, json=reset).status_code == 204
+    assert api.client.get(PREFIX + '/workspaces/current', headers=old).status_code == 401
+    api.identity.set_member(api.wb, uid, UserRole.MEMBER)
+    assert api.client.post(path + f'/{uid}/password', headers=owner, json=reset).status_code == 400
+
+
+def test_add_existing_user_preserves_credentials_and_other_workspace(api):
+    headers = api.login()
+    before = api.identity.get_user(api.users['bob']['id'])
+    response = api.client.post(PREFIX + '/workspaces/current/members', headers=headers,
+        json=dict(email='bob@example.com', full_name='Ignored name', role='MEMBER', temporary_password=''))
+    assert response.status_code == 201, response.text
+    assert response.json() == {'created': False}
+    after = api.identity.get_user(before['id'])
+    assert after['hashed_password'] == before['hashed_password']
+    assert after['full_name'] == before['full_name']
+    assert api.identity.get_member_role(api.wb, before['id']) == UserRole.OWNER

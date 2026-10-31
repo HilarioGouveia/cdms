@@ -1,5 +1,7 @@
 # 📑 SDD — Creator Data Marketing System (CDMS)
 
+> Referência histórica. Para os contratos atuais de Studio, identidade, orçamento, A/B, ingestão Meta e Demo 2.0, consulte o [SDD-STUDIO-001 v1.0.0](SDD-STUDIO-001-v1.0.0.md). Exemplos de código, metas de roadmap e números de testes deste documento pertencem à etapa em que foi escrito e não comprovam o estado atual nem uma publicação em produção.
+
 **Versão:** 2.4.0 (Ingestão de Mídia, Tendências Históricas e Recalibração Assistida)  
 **Padrão:** Spec-Driven Development (SDD) com Clean Architecture, Hexagonal (Ports & Adapters) e Monólito Modular  
 **Layout de Empacotamento:** Python `src/` layout (PEP 517/621 via `pyproject.toml`)

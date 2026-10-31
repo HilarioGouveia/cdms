@@ -29,8 +29,7 @@ class BudgetAllocation:
             raise ValueError("allocated_amount_cents deve ser estritamente positivo.")
         if self.spent_amount_cents < 0:
             raise ValueError("spent_amount_cents não pode ser negativo.")
-        if self.spent_amount_cents > self.allocated_amount_cents:
-            raise ValueError("Gasto executado não pode exceder o teto alocado da hipótese.")
+        # Gasto real acima do teto precisa ser registrado, não apagado/rejeitado.
 
     @property
     def allocated_reais(self) -> Decimal:

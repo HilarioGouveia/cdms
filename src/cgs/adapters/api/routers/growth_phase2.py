@@ -1,126 +1,84 @@
-"""Endpoints REST da Fase 2 do CGS: Orçamento de Testes e Significância Bayesiana."""
-
+"""Orçamento por ciclo e avaliação Beta-Binomial com histórico."""
 from decimal import Decimal
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
-from cdms.adapters.api.routers.growth import InputModel as BaseModel
-
-from cdms.adapters.api.dependencies import get_workspace_repositories, require_writer, WorkspaceRepositories
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import Field
+from cdms.adapters.api.routers.growth import InputModel
+from cdms.adapters.api.dependencies import get_workspace_repositories, require_writer, require_manager, WorkspaceRepositories
 from cdms.domain.entities.tenant import TenantContext
-from cgs.adapters.persistence.sqlite_cgs_fase2_repo import SQLiteCGSPhase2Repository
-from cgs.application.use_cases.allocate_experiment_budget import AllocateExperimentBudgetUseCase
+from cgs.application.use_cases.experiment_finance import ExperimentFinance, money_cents
 from cgs.domain.entities.budget_allocation import ExperimentRiskTier
-from cgs.domain.services.bayesian_analyzer import BayesianExperimentAnalyzer
 
-router = APIRouter(prefix="/growth-v2", tags=["CGS Fase 2: Alocação Orçamentária e Significância"])
+router=APIRouter(prefix='/growth-v2',tags=['Experimentos: orçamento e avaliação A/B'])
 
-
-class BudgetAllocationRequest(BaseModel):
-    hypothesis_id: int
+class BudgetAllocationRequest(InputModel):
+    hypothesis_id: int = Field(gt=0,strict=True)
     cycle_id: str
-    amount_reais: float
+    amount_reais: Decimal
     risk_tier: ExperimentRiskTier = ExperimentRiskTier.LOW
-    max_cpa_target_reais: Optional[float] = None
+    max_cpa_target_reais: Decimal | None = None
 
-
-class BudgetAllocationResponse(BaseModel):
-    hypothesis_id: int
+class BayesianEvaluationRequest(InputModel):
+    hypothesis_id: int = Field(gt=0,strict=True)
     cycle_id: str
-    allocated_reais: float
-    risk_tier: str
-    burn_rate_pct: float
+    control_conversions: int = Field(ge=0,strict=True)
+    control_sample: int = Field(gt=0,strict=True)
+    treatment_conversions: int = Field(ge=0,strict=True)
+    treatment_sample: int = Field(gt=0,strict=True)
+    sample_minimum: int = Field(default=100,gt=0,strict=True)
+    event_definition: str = Field(default='Conversão binária por unidade exposta',min_length=1,max_length=500)
 
+class AmountRequest(InputModel):
+    amount_reais: Decimal
 
-class BayesianEvaluationRequest(BaseModel):
-    hypothesis_id: int
-    control_conversions: int
-    control_sample: int
-    treatment_conversions: int
-    treatment_sample: int
-    sample_minimum: int = 100
-
-
-class BayesianEvaluationResponse(BaseModel):
-    hypothesis_id: int
-    probability_to_beat_control: float
-    lift_pct: float
-    verdict: str
-    sample_adequacy_ratio: float
-
-
-@router.post("/allocate-budget", response_model=BudgetAllocationResponse)
-def allocate_budget(
-    payload: BudgetAllocationRequest,
-    store: WorkspaceRepositories = Depends(get_workspace_repositories),
-    _writer: TenantContext = Depends(require_writer),
-):
-    """Aloca teto orçamentário para o teste com trava de limite do ciclo."""
+@router.post('/allocate-budget')
+def allocate_budget(payload: BudgetAllocationRequest, store: WorkspaceRepositories=Depends(get_workspace_repositories),
+                    tenant: TenantContext=Depends(require_writer)):
     store.hypothesis(payload.hypothesis_id)
-    repo = store.phase2()
-    uc = AllocateExperimentBudgetUseCase(repo)
+    alloc=ExperimentFinance(store.phase2(),store.growth,actor=tenant.user_id).allocate(
+        payload.hypothesis_id,payload.cycle_id,payload.amount_reais,payload.risk_tier,payload.max_cpa_target_reais)
+    return dict(hypothesis_id=alloc.hypothesis_id,cycle_id=alloc.cycle_id,allocated_reais=alloc.allocated_reais,
+                risk_tier=alloc.risk_tier,burn_rate_pct=alloc.burn_rate_pct,spent_reais=alloc.spent_reais)
 
-    try:
-        alloc = uc.execute(
-            hypothesis_id=payload.hypothesis_id,
-            cycle_id=payload.cycle_id,
-            amount_reais=Decimal(str(payload.amount_reais)),
-            risk_tier=payload.risk_tier,
-            max_cpa_target_reais=Decimal(str(payload.max_cpa_target_reais)) if payload.max_cpa_target_reais else None,
-        )
-        return BudgetAllocationResponse(
-            hypothesis_id=alloc.hypothesis_id,
-            cycle_id=alloc.cycle_id,
-            allocated_reais=float(alloc.allocated_reais),
-            risk_tier=alloc.risk_tier.value,
-            burn_rate_pct=float(alloc.burn_rate_pct),
-        )
-    except (ValueError, TypeError) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-
-@router.post("/evaluate-statistical-significance", response_model=BayesianEvaluationResponse)
-def evaluate_significance(
-    payload: BayesianEvaluationRequest,
-    store: WorkspaceRepositories = Depends(get_workspace_repositories),
-    _writer: TenantContext = Depends(require_writer),
-):
-    """Calcula a significância Bayesiana, lift e regras de Early Stopping."""
+@router.post('/evaluate-statistical-significance')
+def evaluate_significance(payload: BayesianEvaluationRequest,store: WorkspaceRepositories=Depends(get_workspace_repositories),
+                          tenant: TenantContext=Depends(require_writer)):
     store.hypothesis(payload.hypothesis_id)
-    repo = store.phase2()
-    try:
-        eval_result = BayesianExperimentAnalyzer.evaluate(
-            hypothesis_id=payload.hypothesis_id,
-            control_conversions=payload.control_conversions,
-            control_sample=payload.control_sample,
-            treatment_conversions=payload.treatment_conversions,
-            treatment_sample=payload.treatment_sample,
-            sample_minimum=payload.sample_minimum,
-        )
-        repo.save_statistical_evaluation(eval_result)
+    values=payload.model_dump()
+    return ExperimentFinance(store.phase2(),store.growth,actor=tenant.user_id).evaluate(**values)
 
-        return BayesianEvaluationResponse(
-            hypothesis_id=eval_result.hypothesis_id,
-            probability_to_beat_control=float(eval_result.probability_to_beat_control),
-            lift_pct=float(eval_result.lift_pct),
-            verdict=eval_result.verdict.value,
-            sample_adequacy_ratio=float(eval_result.sample_adequacy_ratio),
-        )
-    except (ValueError, TypeError) as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-@router.get("/budgets/{hypothesis_id}")
-def get_budget(hypothesis_id: int, store: WorkspaceRepositories = Depends(get_workspace_repositories)):
+@router.get('/budgets/{hypothesis_id}')
+def get_budget(hypothesis_id: int,cycle_id: str | None=None,store: WorkspaceRepositories=Depends(get_workspace_repositories)):
     store.hypothesis(hypothesis_id)
-    budget = store.phase2().get_budget_by_hypothesis(hypothesis_id)
-    if budget is None:
-        raise HTTPException(404, "Orçamento não encontrado neste workspace.")
-    return budget
+    result=store.phase2().get_budget_by_hypothesis(hypothesis_id,cycle_id)
+    if result is None:
+        raise HTTPException(404,'Orçamento não encontrado neste workspace.')
+    return result
 
-
-@router.get("/evaluations/{hypothesis_id}")
-def get_evaluation(hypothesis_id: int, store: WorkspaceRepositories = Depends(get_workspace_repositories)):
+@router.get('/evaluations/{hypothesis_id}')
+def get_evaluation(hypothesis_id: int,cycle_id: str | None=None,store: WorkspaceRepositories=Depends(get_workspace_repositories)):
     store.hypothesis(hypothesis_id)
-    evaluation = store.phase2().get_evaluation_by_hypothesis(hypothesis_id)
-    if evaluation is None:
-        raise HTTPException(404, "Avaliação não encontrada neste workspace.")
-    return evaluation
+    result=store.phase2().get_evaluation_by_hypothesis(hypothesis_id,cycle_id)
+    if result is None:
+        raise HTTPException(404,'Avaliação não encontrada neste workspace.')
+    return result
+
+@router.get('/evaluations/{hypothesis_id}/history')
+def evaluation_history(hypothesis_id: int,cycle_id: str | None=None,store: WorkspaceRepositories=Depends(get_workspace_repositories)):
+    store.hypothesis(hypothesis_id)
+    return store.phase2().evaluation_history(hypothesis_id,cycle_id)
+
+@router.get('/cycles/{cycle_id}/budget')
+def cycle_budget(cycle_id: str,store: WorkspaceRepositories=Depends(get_workspace_repositories)):
+    repo=store.phase2()
+    return dict(limit_cents=repo.get_cycle_limit(cycle_id),allocations=repo.list_budgets_by_cycle(cycle_id),history=repo.budget_history(cycle_id))
+
+@router.put('/cycles/{cycle_id}/limit',status_code=204)
+def set_limit(cycle_id: str,payload: AmountRequest,store: WorkspaceRepositories=Depends(get_workspace_repositories),
+              tenant: TenantContext=Depends(require_manager)):
+    store.phase2().set_cycle_limit(cycle_id,money_cents(payload.amount_reais),tenant.user_id)
+
+@router.put('/budgets/{hypothesis_id}/cycles/{cycle_id}/spend',status_code=204)
+def record_spend(hypothesis_id: int,cycle_id: str,payload: AmountRequest,store: WorkspaceRepositories=Depends(get_workspace_repositories),
+                 tenant: TenantContext=Depends(require_writer)):
+    store.hypothesis(hypothesis_id)
+    ExperimentFinance(store.phase2(),store.growth,actor=tenant.user_id).spend(hypothesis_id,cycle_id,payload.amount_reais)

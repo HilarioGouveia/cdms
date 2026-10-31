@@ -12,7 +12,7 @@ def render_cycle_story(core, growth, cycle_id):
         key="growth_story_audience",
         help="O público adapta a apresentação. Não altera permissões nem publica o conteúdo.",
     )
-    simulated = st.session_state.get("studio_workspace") == "CDMS Demo"
+    simulated = not st.session_state.get("_auth_token") and st.session_state.get("studio_workspace") == "CDMS Demo"
     story = GenerateCycleStoryUseCase(core, growth).execute(cycle_id, audience, simulated=simulated)
     with st.container(key="cycle_story"):
         st.caption(f"NARRATIVA DO CICLO / {cycle_id} · GERADOR v{story.version}")

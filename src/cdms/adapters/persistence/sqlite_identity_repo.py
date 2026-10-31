@@ -18,6 +18,10 @@ class SQLiteIdentityRepository:
             columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
             if "token_version" not in columns:
                 conn.execute("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0")
+            if "must_change_password" not in columns:
+                conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+            if "theme_preference" not in columns:
+                conn.execute("ALTER TABLE users ADD COLUMN theme_preference TEXT NOT NULL DEFAULT 'dark-premium'")
             conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_normalized ON users(lower(email))")
 
     @contextmanager
@@ -44,6 +48,12 @@ class SQLiteIdentityRepository:
     def get_user(self, user_id: str):
         with self.connection() as conn:
             return conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+    def set_theme_preference(self, user_id, profile):
+        if profile not in {'dark-premium', 'soft-light'}:
+            raise ValueError('Tema inválido.')
+        with self.connection() as conn:
+            conn.execute('UPDATE users SET theme_preference = ? WHERE id = ?', (profile, user_id))
 
     def get_user_by_email(self, email: str):
         with self.connection() as conn:
@@ -102,11 +112,11 @@ class SQLiteIdentityRepository:
         with self.connection() as conn:
             conn.execute("UPDATE users SET token_version = token_version + 1 WHERE id = ?", (user_id,))
 
-    def change_password(self, user_id: str, hashed_password: str):
+    def change_password(self, user_id: str, hashed_password: str, *, temporary=False):
         with self.connection() as conn:
             conn.execute(
-                "UPDATE users SET hashed_password = ?, token_version = token_version + 1 WHERE id = ?",
-                (hashed_password, user_id),
+                "UPDATE users SET hashed_password = ?, must_change_password = ?, token_version = token_version + 1 WHERE id = ?",
+                (hashed_password, int(temporary), user_id),
             )
 
     def get_member_role(self, workspace_id: str, user_id: str):

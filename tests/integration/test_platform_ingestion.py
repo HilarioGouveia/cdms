@@ -19,6 +19,33 @@ from cdms.config.workspace_storage import workspace_db_path
 TOKEN = "test-ingestion-token-never-persist-in-clear"
 
 
+def test_reviewed_import_requires_completed_job_open_ritual_and_current_writer(ingestion):
+    from cdms.application.services.platform_ingestion import PlatformIngestion
+    from cdms.domain.entities.tenant import UserRole
+    x=ingestion
+    cid=x.connect().json()['id']
+    jid=x.enqueue(cid).json()['job']['id']
+    uid=x.api.users['alice']['id']
+    tenant=x.api.identity.get_tenant(uid,x.api.wa)
+    service=PlatformIngestion(x.repo,x.api.identity,tenant,x.factory,lambda:CredentialVault(x.key),x.dispatcher)
+    core=Mock()
+    core.get_ritual_by_cycle.return_value=None
+    with pytest.raises(ValueError):
+        service.prepare_ritual(jid,core)
+    x.run(jid)
+    core.get_ritual_by_cycle.return_value=object()
+    with pytest.raises(ValueError):
+        service.prepare_ritual(jid,core)
+    assert x.repo.ritual_source('2026-10-19') is None
+    core.get_ritual_by_cycle.return_value=None
+    result=service.prepare_ritual(jid,core)
+    assert result['metrics']['avg_retention_pct'] is None
+    assert x.repo.ritual_source('2026-10-19')['reviewed_by']==uid
+    x.api.identity.set_member(x.api.wa,uid,UserRole.VIEWER)
+    with pytest.raises(ValueError):
+        service.prepare_ritual(jid,core)
+
+
 @pytest.fixture
 def ingestion(api):
     session = Mock()

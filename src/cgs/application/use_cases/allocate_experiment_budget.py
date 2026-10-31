@@ -17,19 +17,13 @@ class AllocateExperimentBudgetUseCase:
         amount_reais: Decimal,
         risk_tier: ExperimentRiskTier = ExperimentRiskTier.LOW,
         max_cpa_target_reais: Decimal = None,
+        actor: str = None,
     ) -> BudgetAllocation:
+        if not amount_reais.is_finite() or amount_reais <= 0 or amount_reais != amount_reais.quantize(Decimal('.01')):
+            raise ValueError('Informe um valor positivo com até duas casas decimais.')
+        if max_cpa_target_reais is not None and (not max_cpa_target_reais.is_finite() or max_cpa_target_reais <= 0):
+            raise ValueError('CPA deve ser positivo.')
         allocated_cents = int((amount_reais * Decimal("100")).to_integral_value())
-
-        # Verifica orçamento já comprometido no ciclo
-        current_allocations = self.repository.list_budgets_by_cycle(cycle_id)
-        total_committed = sum(b.allocated_amount_cents for b in current_allocations if b.hypothesis_id != hypothesis_id)
-
-        if total_committed + allocated_cents > self.max_cycle_budget_cents:
-            available = Decimal(self.max_cycle_budget_cents - total_committed) / Decimal("100")
-            raise ValueError(
-                f"Teto orçamentário do ciclo '{cycle_id}' excedido! "
-                f"Disponível: R$ {available:,.2f}, Solicitado: R$ {amount_reais:,.2f}"
-            )
 
         max_cpa_cents = int((max_cpa_target_reais * Decimal("100")).to_integral_value()) if max_cpa_target_reais else None
 
@@ -40,4 +34,4 @@ class AllocateExperimentBudgetUseCase:
             risk_tier=risk_tier,
             max_cpa_target_cents=max_cpa_cents,
         )
-        return self.repository.save_budget_allocation(allocation)
+        return self.repository.save_budget_allocation(allocation, max_cycle_budget_cents=self.max_cycle_budget_cents, actor=actor)

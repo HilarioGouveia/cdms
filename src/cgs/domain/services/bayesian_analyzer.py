@@ -1,83 +1,47 @@
-"""Serviço puro de cálculo de significância Bayesiana e Early Stopping para o CGS."""
+"""Inferência Beta-Binomial com prior Beta(1,1) e Monte Carlo reproduzível."""
+from decimal import Decimal
+from functools import lru_cache
+import random
+from cgs.domain.entities.statistical_validation import BayesianExperimentEvaluation, StatisticalSignificanceVerdict as Verdict
 
-from decimal import Decimal, ROUND_HALF_UP
-import math
-from cgs.domain.entities.statistical_validation import (
-    BayesianExperimentEvaluation,
-    StatisticalSignificanceVerdict,
-)
-
+@lru_cache(maxsize=128)
+def posterior(c, n, t, m):
+    rng = random.Random(1729)
+    differences = sorted((rng.betavariate(t+1, m-t+1) - rng.betavariate(c+1, n-c+1)) * 100 for _ in range(30000))
+    return (Decimal(str(round(sum(d > 0 for d in differences)/len(differences)*100, 2))),
+            Decimal(str(round(differences[749], 4))), Decimal(str(round(differences[29249], 4))))
 
 class BayesianExperimentAnalyzer:
-    """Calcula probabilidade de ganho e parada antecipada com base em distribuições Beta/Binomial conjugadas."""
-
     @classmethod
-    def evaluate(
-        cls,
-        hypothesis_id: int,
-        control_conversions: int,
-        control_sample: int,
-        treatment_conversions: int,
-        treatment_sample: int,
-        sample_minimum: int = 100,
-        significance_threshold_pct: Decimal = Decimal("95.0"),
-    ) -> BayesianExperimentEvaluation:
-        if control_sample <= 0 or treatment_sample <= 0:
-            raise ValueError("Amostras de controle e tratamento devem ser maiores que zero.")
-
-        # Conversão para taxas empíricas
-        cr_control = Decimal(control_conversions) / Decimal(control_sample)
-        cr_treatment = Decimal(treatment_conversions) / Decimal(treatment_sample)
-
-        # Cálculo de Lift Percentual
-        if cr_control > Decimal("0"):
-            lift = (((cr_treatment - cr_control) / cr_control) * Decimal("100")).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            )
+    def evaluate(cls, hypothesis_id, control_conversions, control_sample, treatment_conversions,
+                 treatment_sample, sample_minimum=100, significance_threshold_pct=Decimal('95'), cycle_id=None,
+                 event_definition='Conversão binária por unidade exposta'):
+        if not isinstance(event_definition,str) or not event_definition.strip() or len(event_definition)>500:
+            raise ValueError('Descreva o evento binário de conversão em até 500 caracteres.')
+        for conversions, sample in ((control_conversions, control_sample), (treatment_conversions, treatment_sample)):
+            if type(sample) is not int or type(conversions) is not int or sample <= 0 or not 0 <= conversions <= sample:
+                raise ValueError('Informe amostras positivas e conversões inteiras entre zero e a amostra.')
+        if type(sample_minimum) is not int or sample_minimum <= 0:
+            raise ValueError('A amostra mínima deve ser um inteiro positivo.')
+        threshold = Decimal(str(significance_threshold_pct))
+        if not threshold.is_finite() or not 50 < threshold < 100:
+            raise ValueError('O limiar deve estar entre 50 e 100%.')
+        c, t = Decimal(control_conversions)/control_sample, Decimal(treatment_conversions)/treatment_sample
+        lift = ((t-c)/c*100).quantize(Decimal('.01')) if c else None
+        raw_adequacy = Decimal(min(control_sample,treatment_sample))/sample_minimum
+        adequacy = raw_adequacy.quantize(Decimal('.01'))
+        probability, low, high = posterior(control_conversions,control_sample,treatment_conversions,treatment_sample)
+        if raw_adequacy < Decimal('.5'):
+            verdict = Verdict.INCONCLUSIVE_INSUFFICIENT_SAMPLE
+        elif lift is not None and lift < -30 and probability <= 100-threshold:
+            verdict = Verdict.EARLY_STOPPED_HIGH_LOSS
+        elif raw_adequacy < 1:
+            verdict = Verdict.INCONCLUSIVE_INSUFFICIENT_SAMPLE
+        elif probability >= threshold:
+            verdict = Verdict.STATISTICALLY_SIGNIFICANT
         else:
-            lift = Decimal("100.00") if cr_treatment > 0 else Decimal("0.00")
-
-        # Proporção da amostra frente ao piso de corte
-        adequacy = (Decimal(treatment_sample) / Decimal(sample_minimum)).quantize(
-            Decimal("0.01"), rounding=ROUND_HALF_UP
-        )
-
-        # Heurística Bayesiana aproximada via Normalização de Gauss (Z-score normal para A/B Test)
-        p_pooled = (Decimal(control_conversions + treatment_conversions)) / (
-            Decimal(control_sample + treatment_sample)
-        )
-        se = math.sqrt(float(p_pooled * (Decimal("1") - p_pooled) * (Decimal("1") / Decimal(control_sample) + Decimal("1") / Decimal(treatment_sample))))
-
-        if se > 0:
-            diff = float(cr_treatment - cr_control)
-            z = diff / se
-            # Aproximação da CDF Normal para probabilidade de superar o controle
-            p_beat = Decimal(str(round((0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))) * 100, 2)))
-        else:
-            p_beat = Decimal("50.00")
-
-        # Decisão e Veredito com Guard-rail de Amostra e Early Stopping
-        if treatment_sample < (sample_minimum // 2):
-            # Amostra muito prematura
-            verdict = StatisticalSignificanceVerdict.INCONCLUSIVE_INSUFFICIENT_SAMPLE
-        elif lift < Decimal("-30.00") and adequacy >= Decimal("0.50"):
-            # Early stopping acionado: perda catastrófica detectada precocemente
-            verdict = StatisticalSignificanceVerdict.EARLY_STOPPED_HIGH_LOSS
-        elif adequacy < Decimal("1.00"):
-            verdict = StatisticalSignificanceVerdict.INCONCLUSIVE_INSUFFICIENT_SAMPLE
-        elif p_beat >= significance_threshold_pct:
-            verdict = StatisticalSignificanceVerdict.STATISTICALLY_SIGNIFICANT
-        else:
-            verdict = StatisticalSignificanceVerdict.NO_EFFECT_DETECTED
-
-        return BayesianExperimentEvaluation(
-            hypothesis_id=hypothesis_id,
-            control_conversions=control_conversions,
-            control_sample=control_sample,
-            treatment_conversions=treatment_conversions,
-            treatment_sample=treatment_sample,
-            probability_to_beat_control=p_beat,
-            lift_pct=lift,
-            verdict=verdict,
-            sample_adequacy_ratio=adequacy,
-        )
+            verdict = Verdict.NO_EFFECT_DETECTED
+        return BayesianExperimentEvaluation(hypothesis_id, control_conversions, control_sample,
+            treatment_conversions, treatment_sample, probability, lift, verdict, adequacy,
+            cycle_id=cycle_id, difference_low_pp=low, difference_high_pp=high,
+            sample_minimum=sample_minimum, significance_threshold_pct=threshold,event_definition=event_definition.strip())

@@ -21,7 +21,8 @@ def meta_connector_factory(connection, token):
 
 def authorize(identity, workspace_id, user_id):
     tenant = identity.get_tenant(user_id, workspace_id)
-    return tenant is not None and tenant.role != UserRole.VIEWER
+    user = identity.get_user(user_id)
+    return tenant is not None and not user['must_change_password'] and tenant.role != UserRole.VIEWER
 
 
 def process_job(workspace_id, job_id, *, identity=None, root=None, vault=None, connector_factory=None):

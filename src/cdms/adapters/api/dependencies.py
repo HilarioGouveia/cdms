@@ -44,6 +44,8 @@ def get_current_tenant(
         version = payload["token_version"]
         if not user or not tenant or type(version) is not int or version != user["token_version"]:
             raise unauthorized
+        if user['must_change_password']:
+            raise HTTPException(403, 'Troque a senha temporária antes de acessar o workspace.')
         return tenant  # O papel vigente vem do banco, não do token.
     except (jwt.PyJWTError, ValueError, KeyError, TypeError):
         raise unauthorized

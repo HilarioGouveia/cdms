@@ -15,11 +15,12 @@ from cgs.domain.entities.funnel import ConversionType, FunnelBaseline
 LOCAL = "Local · CDMS"
 DEMO = "CDMS Demo"
 SCOPED_PREFIXES = ("dec_", "val_", "avail_", "reason_", "custom_reason_", "cal_", "growth_",
-                   "ritual_learning_", "_ritual_")
+                   "ritual_learning_", "_ritual_", "experiment_draft_")
 SCOPED_KEYS = {"cycle_week_start", "ritual_proposal", "ritual_step_selector", "_decision_form_source",
                "parsed_metrics_dto", "active_calibs", "active_calibs_list", "reload_calibs",
                "studio_cycle", "studio_section", "studio_page_Governança",
                "studio_page_Experimentos", "studio_page_Demonstração"}
+SCOPED_KEYS.add('studio_page_Configurações')
 
 
 def scoped_keys():
@@ -112,3 +113,16 @@ def load_demo(restore=False):
                                  "cycle_week_start": anchor, "_demo_notice": "Pacote inicial restaurado." if restore else "Pacote de demonstração carregado."})
     except Exception as error:
         st.session_state["_demo_error"] = str(error)
+
+
+def open_demo_practice():
+    if st.session_state.studio_workspace!=DEMO:
+        return
+    manifest=st.session_state.get('_demo_manifest',{})
+    if 'sandbox_cycle' not in manifest:
+        return
+    cycle=date.fromisoformat(manifest['sandbox_cycle'])
+    st.session_state.update(studio_cycle=cycle,cycle_week_start=cycle,studio_section='Cockpit',studio_explorer=True)
+    st.session_state.pop('_evidence_selection',None)
+    for page in ('budget','ab_evaluation'):
+        st.session_state[f'finance_hypothesis_{DEMO}_{page}']=manifest['sandbox_hypothesis']

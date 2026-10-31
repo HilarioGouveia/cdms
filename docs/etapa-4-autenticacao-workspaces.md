@@ -6,7 +6,7 @@ A API usa um banco central de identidade (`data/identity.db`) e um banco operaci
 
 Esta implementação usa isolamento físico por arquivo, em vez de acrescentar filtros `workspace_id` a cada consulta dos repositórios locais. Assim, baseline ativa, IDs de hipóteses e decisões, ciclos semanais, orçamento e estatísticas permanecem independentes entre workspaces, incluindo casos em que os IDs numéricos ou datas coincidem.
 
-O banco local `data/cdms_dev.db` não é importado nem atribuído automaticamente a um proprietário. O Streamlit continua no modo local. Autenticação da interface Streamlit, migração de dados locais para um workspace e isolamento lógico em um banco compartilhado não fazem parte desta etapa.
+O banco local `data/cdms_dev.db` não é importado nem atribuído automaticamente a um proprietário. A etapa 4 implementou a autenticação da API; o login do Streamlit foi acrescentado posteriormente na [etapa 13](etapa-13-login-studio.md), com os mesmos usuários e bancos de workspace. Migração dos dados locais e isolamento lógico em um banco compartilhado não fazem parte destas entregas.
 
 ## Configuração e primeiro acesso
 
@@ -82,7 +82,7 @@ Os testes HTTP usam TestClient, bancos temporários de identidade e operação, 
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Este desenho é voltado ao armazenamento SQLite local da API. SSO, recuperação de senha por email, controles distribuídos de tentativas de login, autenticação do Streamlit e infraestrutura de publicação não foram implementados nesta etapa. Integrações reais de plataformas e execução de workers continuam como próxima etapa.
+Este desenho é voltado ao armazenamento SQLite local da API. SSO, recuperação de senha por email, controles distribuídos de tentativas de login e infraestrutura de publicação não foram implementados nesta etapa. O login do Streamlit foi acrescentado na etapa 13. Integrações reais de plataformas e execução de workers são tratadas em etapas próprias.
 
 
 ## Resultado registrado em 2026-10-28

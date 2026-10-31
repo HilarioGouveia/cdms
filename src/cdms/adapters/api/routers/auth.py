@@ -1,10 +1,10 @@
 """Login real com senha e vínculo de workspace; logout revoga tokens do usuário."""
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Security
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from cdms.adapters.api.dependencies import get_current_tenant, get_identity_repo
+from cdms.adapters.api.dependencies import get_current_tenant, get_identity_repo, security_scheme
 from cdms.adapters.persistence.sqlite_identity_repo import SQLiteIdentityRepository
-from cdms.config.security import create_access_token, verify_password, get_password_hash
 from cdms.domain.entities.tenant import TenantContext
+from cdms.application.services.workspace_auth import WorkspaceAuth, AuthenticationError
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
@@ -24,17 +24,11 @@ class TokenResponse(BaseModel):
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, request: Request, identity: SQLiteIdentityRepository = Depends(get_identity_repo)):
-    user = identity.get_user_by_email(str(payload.email))
-    password_hash = user["hashed_password"] if user else request.app.state.dummy_password_hash
-    password_ok = verify_password(payload.password, password_hash)
-    tenant = identity.get_tenant(user["id"], payload.workspace_id) if user else None
-    if not password_ok or not tenant:
-        raise HTTPException(401, "Credenciais inválidas ou acesso ao workspace indisponível.",
-                            headers={"WWW-Authenticate": "Bearer"})
-    token = create_access_token(
-        {"sub": user["id"], "workspace_id": tenant.workspace_id, "token_version": user["token_version"]},
-        secret_key=request.app.state.secret_key,
-    )
+    service = WorkspaceAuth(identity, request.app.state.secret_key, request.app.state.dummy_password_hash)
+    try:
+        token = service.login(str(payload.email), payload.password, payload.workspace_id)
+    except AuthenticationError as error:
+        raise HTTPException(401, str(error), headers={"WWW-Authenticate": "Bearer"}) from error
     return TokenResponse(access_token=token)
 
 
@@ -49,10 +43,20 @@ class PasswordChangeRequest(BaseModel):
     new_password: str = Field(min_length=12, max_length=1024)
 
 
+def password_session(request: Request, credentials=Security(security_scheme),
+                     identity: SQLiteIdentityRepository = Depends(get_identity_repo)):
+    service = WorkspaceAuth(identity, request.app.state.secret_key, request.app.state.dummy_password_hash)
+    try:
+        return service.resolve(credentials.credentials if credentials else '')
+    except AuthenticationError as error:
+        raise HTTPException(401, str(error)) from error
+
+
 @router.post("/password", status_code=204)
-def change_password(payload: PasswordChangeRequest, tenant: TenantContext = Depends(get_current_tenant),
+def change_password(payload: PasswordChangeRequest, session=Depends(password_session),
                     identity: SQLiteIdentityRepository = Depends(get_identity_repo)):
-    user = identity.get_user(tenant.user_id)
-    if not verify_password(payload.current_password, user["hashed_password"]):
-        raise HTTPException(401, "Senha atual inválida.")
-    identity.change_password(tenant.user_id, get_password_hash(payload.new_password))
+    from cdms.application.services.workspace_users import WorkspaceUsers
+    try:
+        WorkspaceUsers(identity).change_password(session.tenant.user_id, payload.current_password, payload.new_password)
+    except ValueError as error:
+        raise HTTPException(401 if str(error) == 'Senha atual inválida.' else 400, str(error)) from error

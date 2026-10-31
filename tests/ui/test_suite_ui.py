@@ -37,6 +37,7 @@ def ritual_step(at, step):
 
 @pytest.fixture
 def ui(tmp_path, monkeypatch):
+    monkeypatch.setenv("CDMS_STUDIO_MODE", "local")
     config = replace(settings_module.settings, DATA_DIR=tmp_path, DB_PATH=tmp_path / "suite.db")
     monkeypatch.setattr(settings_module, "settings", config)
     monkeypatch.setattr(container_module, "settings", config)
@@ -219,6 +220,8 @@ def test_studio_preserves_ritual_draft_and_panel_toggles(ui):
     assert_healthy(at)
     assert any("Decision Cockpit" == title.value for title in at.title)
     at.button(key="studio_toggle_explorer").click().run()
+    assert not at.session_state['studio_evidence']
+    at.button(key='studio_toggle_evidence').click().run()
     at.button(key="studio_toggle_evidence").click().run()
     assert not at.session_state["studio_evidence"]
     at.button(key="studio_toggle_evidence").click().run()
@@ -608,3 +611,54 @@ def test_storytelling_is_read_only_and_cockpit_link_keeps_cycle(ui):
     assert any("Sem valores financeiros" in text.value for text in at.caption)
     assert not SQLiteGrowthRepository(str(db_path)).list_funnel_audits()
     assert not container_module.get_container().repository.list_rituals()
+
+
+def test_demo_v2_finance_and_offline_meta_import_are_available(ui,monkeypatch):
+    import requests
+    def forbidden(*args,**kwargs):
+        raise AssertionError('Demo não deve acessar Meta ou Redis.')
+    monkeypatch.setattr(requests,'get',forbidden)
+    monkeypatch.setattr('cdms.adapters.tasks.ingestion_runtime.dispatch_job',forbidden)
+    monkeypatch.delenv('CDMS_CREDENTIAL_KEY',raising=False)
+    at,local_path=ui
+    before=local_path.read_bytes()
+    at.selectbox(key='studio_workspace').set_value('CDMS Demo').run()
+    at.button(key='demo_load').click().run()
+    assert_healthy(at)
+    assert at.session_state['_demo_manifest']['version']=='2.0'
+    at.button(key='demo_practice').click().run()
+    assert_healthy(at)
+    assert any('SIMULAÇÃO OFFLINE' in item.value for item in at.info)
+    at.button(key='studio_nav_Experimentos').click().run()
+    at.button(key='studio_page_budget').click().run()
+    assert_healthy(at)
+    assert any(item.value=='R$ 300.00' for item in at.metric)
+    at.button(key='studio_page_ab_evaluation').click().run()
+    assert_healthy(at)
+    assert any('Amostra insuficiente' in item.value for item in at.markdown)
+    at.button(key='studio_toggle_evidence').click().run()
+    assert_healthy(at)
+    assert any('Probabilidade de ganho:' in item.value for item in at.markdown)
+    at.button(key='evidence_close').click().run()
+    at.button(key='studio_nav_Configurações').click().run()
+    assert_healthy(at)
+    assert at.button(key='studio_page_integrations')
+    assert not any(b.key=='studio_page_users' for b in at.button)
+    assert not any(t.label=='Token de acesso Meta' for t in at.text_input)
+    at.button(key='studio_nav_Cockpit').click().run()
+    at.button(key='demo_complete_import').click().run()
+    assert_healthy(at)
+    next(c for c in at.checkbox if str(c.key).startswith('meta_review_')).check().run()
+    at.button(key='meta_apply').click().run()
+    assert_healthy(at)
+    assert at.session_state['studio_section']=='Governança'
+    assert at.number_input(key='val_reach').value==2400
+    assert not at.checkbox(key='avail_avg_retention_pct').value
+    from cdms.adapters.persistence.sqlite_repo import SQLiteRepository
+    path=at.session_state['_demo_container'].settings.DB_PATH
+    cycle=at.session_state['_demo_manifest']['sandbox_cycle']
+    assert SQLiteRepository(path).get_ritual_by_cycle(cycle) is None
+    at.selectbox(key='studio_workspace').set_value('Local · CDMS').run()
+    assert_healthy(at)
+    assert not any(b.key=='meta_apply' for b in at.button)
+    assert local_path.read_bytes()==before
