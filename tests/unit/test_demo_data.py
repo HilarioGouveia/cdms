@@ -68,3 +68,54 @@ def test_demo_rejects_arbitrary_paths_dates_and_packages(tmp_path):
         create_demo_bundle(config, uuid4().hex, date(2026, 11, 10), "Tour guiado")
     with pytest.raises(ValueError):
         create_demo_bundle(config, uuid4().hex, date(2026, 11, 9), "custom")
+
+
+def test_demo_finance_and_offline_import_pipeline_without_credentials(tmp_path,monkeypatch):
+    from cgs.adapters.persistence.sqlite_cgs_fase2_repo import SQLiteCGSPhase2Repository
+    from cdms.adapters.persistence.sqlite_ingestion_repo import SQLiteIngestionRepository
+    from cdms.application.demo_ingestion import DemoPlatformIngestion
+    import requests
+    def forbidden(*args,**kwargs):
+        raise AssertionError('A demonstração não pode chamar serviços externos.')
+    monkeypatch.setattr(requests,'get',forbidden)
+    monkeypatch.setattr('cdms.adapters.tasks.ingestion_runtime.dispatch_job',forbidden)
+    monkeypatch.delenv('CDMS_CREDENTIAL_KEY',raising=False)
+    config=replace(settings,DATA_DIR=tmp_path,DB_PATH=tmp_path/'real.db')
+    Container(app_settings=config)
+    before=hashlib.sha256(config.DB_PATH.read_bytes()).hexdigest()
+    bundle=create_demo_bundle(config,uuid4().hex,date(2026,11,9),'Tour guiado')
+    finance=SQLiteCGSPhase2Repository(bundle.db_path)
+    ingestion=SQLiteIngestionRepository(bundle.db_path)
+    counts=bundle.manifest['counts']
+    assert counts['budgets']==counts['ab_evaluations']==13
+    assert counts['simulated_jobs']==len(ingestion.list_jobs())==15
+    assert len(ingestion.list_connections())==3
+    budgets=[b for cycle in [*(r['cycle'] for r in bundle.manifest['cycles']),bundle.manifest['sandbox_cycle']]
+             for b in finance.list_budgets_by_cycle(cycle)]
+    assert len(budgets)==13
+    assert any(b.spent_amount_cents>b.allocated_amount_cents for b in budgets)
+    verdicts={finance.get_evaluation_by_hypothesis(r['hypothesis_id'],r['cycle']).verdict.value
+              for r in bundle.manifest['cycles']}
+    assert verdicts=={'STATISTICALLY_SIGNIFICANT','EARLY_STOPPED_HIGH_LOSS','INCONCLUSIVE_INSUFFICIENT_SAMPLE'}
+    cycle=bundle.manifest['sandbox_cycle']
+    core=SQLiteRepository(bundle.db_path)
+    assert core.get_ritual_by_cycle(cycle) is None
+    jobs=[j for j in ingestion.list_jobs() if j['cycle_id']==cycle]
+    assert {j['status'] for j in jobs}=={'SUCCESS','PENDING','FAILED'}
+    service=DemoPlatformIngestion(bundle.db_path,tmp_path/'demo')
+    success=next(j for j in jobs if j['status']=='SUCCESS')
+    batch=service.prepare_ritual(success['id'],core)
+    assert batch['simulated'] and batch['metrics']['avg_retention_pct'] is None
+    pending=next(j for j in jobs if j['status']=='PENDING')
+    assert service.complete_pending(pending['id'])['status']=='SUCCESS'
+    failed=next(j for j in jobs if j['status']=='FAILED')
+    assert service.enqueue(failed['connection_id'],cycle,retry_failed=True)[0]['status']=='SUCCESS'
+    old=success['id']
+    fresh,_=service.enqueue(success['connection_id'],cycle,force_refresh=True)
+    assert fresh['id']!=old and ingestion.get_batch(old)['simulated']
+    closed=next(j for j in ingestion.list_jobs() if j['cycle_id']!=cycle)
+    with pytest.raises(ValueError):
+        service.prepare_ritual(closed['id'],core)
+    with pytest.raises(ValueError):
+        DemoPlatformIngestion(config.DB_PATH,tmp_path/'demo')
+    assert hashlib.sha256(config.DB_PATH.read_bytes()).hexdigest()==before

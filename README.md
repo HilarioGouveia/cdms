@@ -4,6 +4,37 @@ Plataforma integrada de governança analítica semanal, diagnóstico de oportuni
 
 A solução é construída com base em **Spec-Driven Development (SDD)**, **Clean Architecture**, **Ports & Adapters (Hexagonal)** e layout modular canônico Python `src/` (PEP 517/621).
 
+A especificação vigente dos fluxos integrados está no [SDD do Studio v1.0.0](docs/SDD-STUDIO-001-v1.0.0.md). Os SDDs anteriores continuam como referências históricas; recursos de roadmap não devem ser interpretados como entregas concluídas.
+
+## Uso atual do Studio
+
+| Área | Recursos disponíveis |
+|---|---|
+| Cockpit | Diagnóstico, decisão do ciclo, investimento, avaliações A/B e revisão de importações Meta. |
+| Governança | Ritual semanal, histórico, exportação e calibrações. |
+| Experimentos | Diagnóstico do funil, backlog, orçamento por ciclo, avaliação A/B, baseline e relatório. |
+| Configurações | Usuários e integrações Meta para OWNER/ADMIN; no Demo, somente conexões fictícias. |
+| Minha conta | Nome/perfil, tema claro/escuro persistido por usuário, troca de senha e saída. |
+
+Workspace e ciclo ficam no painel lateral; no celular, em **Seções**. **Evidências** abre um card contextual à direita, sem reduzir a área principal. Em orçamento/A-B acompanha a hipótese selecionada; no backlog, use **Ver evidências**. Os campos de orçamento e A/B mantêm o rascunho ao abrir/fechar o card; os dados só são gravados ao salvar.
+
+### CDMS Demo 2.0
+
+O Demo exige o modo local explícito (`CDMS_STUDIO_MODE=local`). Escolha **CDMS Demo** no seletor de workspace, abra **Demonstração** e carregue o pacote. Instâncias com o pacote 1.0 devem carregar novamente ou usar **Restaurar pacote inicial**.
+
+O pacote contém 12 ciclos históricos, 18 hipóteses, 13 orçamentos, 13 avaliações A/B e 15 coletas Meta fictícias em três contas. Inclui ganho, perda, amostra insuficiente, gasto acima da alocação e coletas concluídas, pendentes e com falha. **Praticar orçamento, A/B e importação** abre um ciclo ainda sem ritual encerrado.
+
+A simulação funciona sem credenciais, acesso à Meta ou Redis. Carregar/restaurar cria uma nova geração isolada e preserva os bancos anteriores e os dados locais. O simulador aceita somente bancos dentro da raiz do Demo.
+
+### Limites das entregas
+
+- O Studio chama serviços de aplicação diretamente; não precisa de uma API HTTP local em execução. A API disponibiliza esses serviços a clientes externos.
+- A coleta Meta real exige credenciais, chave Fernet e Redis/worker/beat. A importação preenche um rascunho revisado; não encerra o ritual, não converte moedas e não alimenta automaticamente grupos A/B.
+- Avaliação A/B usa Beta-Binomial com aproximação Monte Carlo, amostra mínima nos dois grupos e histórico. O resultado depende do desenho do teste e não comprova causalidade sozinho.
+- Não há importação dos antigos registros de orçamento/avaliação para o modelo novo por ciclo.
+- Otimização de tráfego tem cálculo/registro, mas não aplica pesos ou rollback em campanhas. YouTube/TikTok, OAuth/renovação Meta, LLM para sugestões e integração do índice de saúde ao Studio continuam pendentes.
+- O tema por usuário cobre a aparência do Studio e gráficos que usam seus tokens; grades nativas em canvas ainda seguem o tema do servidor.
+
 ---
 
 ## 🧭 Visão Geral da Suíte Integrada
@@ -12,12 +43,14 @@ A suíte unifica a **governança de saúde e rituais** ao **motor de aceleraçã
 
 | Módulo | Papel Metodológico | Entregáveis Principais | Especificação |
 | :--- | :--- | :--- | :--- |
-| **CDMS**<br>*(Creator Data Marketing)* | **Governança, Ritual & Plataforma**<br>Linha de base, eliminação de métricas de vaidade, classificação heurística determinística e trava de decisão única por ciclo. | • Ritual semanal em 4 passos com idempotência (`cycle_id = YYYY-MM-DD`)<br>• Motor determinístico exaustivo (81 combinações)<br>• API REST Multi-Tenant (FastAPI + JWT)<br>• Ingestão semanal Meta Ads com Celery/Redis (YouTube e TikTok no roadmap) | `docs/SDD-CDMS-001-v2.4.0.md`<br>`docs/FASE_2_CDMS_MULTI_TENANT_API.md` |
-| **CGS**<br>*(Creator Growth System)* | **Experimentação & Funil**<br>Diagnóstico financeiro de perdas em $R\$$, priorização determinística por ICE Score, governança causal e ciclo de 7 dias. | • Diagnóstico de funil: Venda Direta (`DIRECT_SALE`) e 2 Passos (`LEAD`)<br>• Histórico cumulativo de oportunidades e ROI de governança<br>• Trava causal de variável única (`ConflictingActiveVariableError`)<br>• Sincronização bidirecional atômica com as Decisões do CDMS | `docs/SDD-CGS-001-v1_2_0.md` |
+| **CDMS**<br>*(Creator Data Marketing)* | **Governança, Ritual & Plataforma**<br>Linha de base, eliminação de métricas de vaidade, classificação heurística determinística e trava de decisão única por ciclo. | • Ritual semanal em 4 passos com idempotência (`cycle_id = YYYY-MM-DD`)<br>• Motor determinístico exaustivo (81 combinações)<br>• API REST Multi-Tenant (FastAPI + JWT)<br>• Ingestão semanal Meta Ads com Celery/Redis (YouTube e TikTok no roadmap) | [SDD atual do Studio](docs/SDD-STUDIO-001-v1.0.0.md)<br>[Referência CDMS](docs/sdd_cdms_v2_4_0.md) |
+| **CGS**<br>*(Creator Growth System)* | **Experimentação & Funil**<br>Diagnóstico financeiro de perdas em $R\$$, priorização determinística por ICE Score, governança causal e ciclo de 7 dias. | • Diagnóstico de funil: Venda Direta (`DIRECT_SALE`) e 2 Passos (`LEAD`)<br>• Histórico cumulativo de oportunidades estimadas<br>• Trava causal de variável única (`ConflictingActiveVariableError`)<br>• Sincronização bidirecional atômica com as Decisões do CDMS | [SDD atual do Studio](docs/SDD-STUDIO-001-v1.0.0.md)<br>[Referência CGS](docs/SDD-CGS-001_v1_2_0.md) |
 
 ---
 
 ## 🗺️ Roadmap de Evolução por Fases
+
+As propostas futuras de gestão estratégica, árvore de métricas, impacto incremental, retenção por coortes e modelos preditivos estão registradas em [Future work — Growth Intelligence](docs/future-work-growth-intelligence.md), com contexto, prioridades sugeridas e dependências.
 
 ```mermaid
 timeline
@@ -95,8 +128,8 @@ flowchart TD
 ### 3. Fase 3: Automação, Conectores e Inteligência Heurística
 
 * **Conectores de Plataformas**: Adaptador HTTP de leitura do Meta Ads com período semanal agregado, timeouts e erros classificados. YouTube e TikTok continuam no roadmap; a API retorna 501 para esses adaptadores.
-* **Creator Health Index**: Score ponderado de saúde operacional ($P_{10}/P_{90}$) com classificação em tiers (`EXCELLENT`, `HEALTHY`, `VULNERABLE`, `CRITICAL`).
-* **Geração Assistida de Hipóteses (IA)**: Serviço `AIHypothesisGenerator` derivando ações causais, piso de corte e ICE Score a partir dos gargalos detectados.
+* **Creator Health Index**: Calculadora de domínio com score ponderado e tiers (`EXCELLENT`, `HEALTHY`, `VULNERABLE`, `CRITICAL`); integração com persistência e Studio ainda pendente.
+* **Sugestões heurísticas de hipóteses**: `AIHypothesisGenerator` usa regras fixas para propor ações, metas e ICE a partir dos gargalos. Não chama LLM; revisão/aceite e integração ao Studio continuam pendentes.
 * **Pipeline Assíncrono com Celery & Redis**: Outbox no banco do workspace, jobs idempotentes, retentativas limitadas, lease de execução e ingestões preservadas por versão. Agendamento semanal habilitado explicitamente por conexão.
 * **Migração 005**: Tabelas `platform_connections`, `creator_health_history` e `ai_hypothesis_suggestions`.
 
@@ -113,10 +146,10 @@ cdms-project/
 ├── data/
 │   └── cdms_dev.db                    # Banco de dados SQLite persistente
 ├── docs/
-│   ├── SDD-CDMS-001-v2.4.0.md         # SDD formal do CDMS (Governança, Ingestão & Rituais)
-│   ├── SDD-CGS-001-v1_2_0.md          # SDD formal do CGS v1.2.0 (Funil & Governança Causal)
-│   ├── FASE_2_CDMS_MULTI_TENANT_API.md# Especificação da Fase 2 (Nuvem, Multi-Tenant & JWT)
-│   └── ROTEIRO_EXECUCAO_SUITE.md      # Roteiro operacional e de engenharia (Fases 1, 2 e 3)
+│   ├── SDD-STUDIO-001-v1.0.0.md       # Contratos atuais do Studio, API e Demo 2.0
+│   ├── SDD-CGS-001_v1_2_0.md          # Referência histórica do CGS
+│   ├── sdd_cdms_v2_4_0.md            # Referência histórica do CDMS
+│   └── roteiro_operacional.md        # Roteiro operacional da suíte
 ├── tests/
 │   ├── conftest.py                    # Fixtures globais, mocks de rede e notificações
 │   ├── unit/
@@ -241,8 +274,8 @@ pytest -v
 * **Migração 001 (CDMS Core):** Tabelas `rituals`, `metric_snapshots`, `decisions`, `learnings`.
 * **Migração 002 (CGS Base):** Tabelas `growth_baselines`, `funnel_opportunity_audits`, `growth_hypotheses`.
 * **Migração 003 (CGS Governança & Funil de 2 Passos):** Colunas `leads_opportunity_reais` e `closing_opportunity_reais` e índices de unicidade de variável ativa.
-* **Migração 004 (Fase 2 Multi-Tenant):** Tabelas `workspaces`, `users`, `workspace_memberships` e partição por `workspace_id`.
-* **Migração 005 (Fase 3 Automação & IA):** Tabelas `platform_connections`, `creator_health_history` e `ai_hypothesis_suggestions`.
+* **Migração 004 (Fase 2 Multi-Tenant):** Identidade central com `workspaces`, `users` e `workspace_members`; banco operacional separado por UUID de workspace.
+* **Migração 005 (referência histórica da Fase 3):** declara tabelas de conexões, saúde e sugestões; não comprova integração desses fluxos ao Studio. A ingestão atual usa a migração 008; orçamento/A-B usam as tabelas `experiment_*`. Consulte o SDD atual.
 
 Backup consistente com a aplicação fechada:
 
@@ -282,7 +315,11 @@ A API exige `CDMS_SECRET_KEY` e não aceita a chave demonstrativa antiga. O coma
 
 Use o UUID retornado no login de `/api/v1/auth/login`. O servidor verifica o vínculo a cada requisição; enviar outro `workspace_id` em cabeçalhos ou payload não troca o armazenamento autenticado. `VIEWER` pode ler os dados, enquanto `MEMBER`, `ADMIN` e `OWNER` podem executar operações de negócio. Apenas `OWNER` e `ADMIN` gerenciam membros, com restrições para alterar administradores e proteger o proprietário.
 
-O Streamlit continua sendo a interface local do banco `data/cdms_dev.db`. Ele não passa a ser uma interface multiusuário autenticada por esta alteração. [Configuração e limites da etapa 4](docs/etapa-4-autenticacao-workspaces.md).
+O Studio exige login por padrão e acessa o banco do workspace autenticado usando as mesmas contas da API. Configure `CDMS_SECRET_KEY` também no processo do Streamlit; depois entre com email e senha e selecione o workspace e o ciclo no painel lateral (no celular, em **Seções**), sem copiar tokens. O modo local anterior exige `CDMS_STUDIO_MODE=local`. Os dados de `data/cdms_dev.db` não são migrados automaticamente. [Login do Studio e configuração da etapa 13](docs/etapa-13-login-studio.md). [Autenticação da API e limites da etapa 4](docs/etapa-4-autenticacao-workspaces.md).
+
+Proprietários e administradores podem cadastrar e gerenciar membros em **Configurações → Gerenciar usuários**, na dock. Contas novas usam senha temporária com troca obrigatória no primeiro acesso. Veja [Cadastro e gestão de usuários](docs/gestao-de-usuarios.md).
+
+Orçamento por hipótese/ciclo e avaliação A/B estão em **Experimentos**. Conexões Meta ficam em **Configurações → Integrações**, com acompanhamento e importação revisada no **Cockpit**. Consulte [Orçamento, A/B e importação Meta](docs/orcamento-ab-importacao-meta.md) para regras, configuração do worker e uso da API.
 
 
 ## Ingestão semanal do Meta Ads

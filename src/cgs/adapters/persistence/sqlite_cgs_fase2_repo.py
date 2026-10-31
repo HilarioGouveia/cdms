@@ -1,166 +1,161 @@
-"""Implementação SQLite do repositório da Fase 2 do CGS."""
-
-import sqlite3
+"""Orçamento transacional por ciclo e avaliações imutáveis, sem importação do modelo legado."""
 from contextlib import contextmanager
-from typing import Iterator
-from typing import List, Optional
+from dataclasses import asdict
+from datetime import datetime, timezone, date
+from decimal import Decimal
+import json
+import sqlite3
 from cgs.application.ports.cgs_fase2_repository import CGSPhase2RepositoryPort
 from cgs.domain.entities.budget_allocation import BudgetAllocation, ExperimentRiskTier
 from cgs.domain.entities.statistical_validation import BayesianExperimentEvaluation, StatisticalSignificanceVerdict
-from decimal import Decimal
+
+
+def cycle_key(value):
+    try:
+        parsed = date.fromisoformat(value)
+    except (TypeError, ValueError):
+        raise ValueError('Ciclo inválido.') from None
+    if value != parsed.isoformat() or parsed.weekday() != 0:
+        raise ValueError('O ciclo deve começar numa segunda-feira.')
+    return parsed.isoformat()
 
 
 class SQLiteCGSPhase2Repository(CGSPhase2RepositoryPort):
-    def __init__(self, db_path: str = "data/cdms_dev.db"):
-        self.db_path = db_path
+    def __init__(self, db_path='data/cdms_dev.db'):
+        self.db_path = str(db_path)
         self._init_schema()
 
     @contextmanager
-    def _get_connection(self) -> Iterator[sqlite3.Connection]:
-        """Finaliza a transação e fecha a conexão mesmo quando a operação falha."""
-        conn = sqlite3.connect(self.db_path)
+    def _get_connection(self):
+        conn = sqlite3.connect(self.db_path, timeout=15)
+        conn.row_factory = sqlite3.Row
         try:
-            conn.row_factory = sqlite3.Row
-            conn.execute("PRAGMA foreign_keys = ON;")
+            conn.execute('PRAGMA foreign_keys=ON')
             with conn:
                 yield conn
         finally:
             conn.close()
 
-    def _init_schema(self) -> None:
-        with self._get_connection() as conn:
-            conn.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS growth_budget_allocations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    hypothesis_id INTEGER NOT NULL UNIQUE,
-                    cycle_id TEXT NOT NULL,
-                    allocated_amount_cents INTEGER NOT NULL,
-                    spent_amount_cents INTEGER NOT NULL DEFAULT 0,
-                    risk_tier TEXT NOT NULL DEFAULT 'LOW',
-                    max_cpa_target_cents INTEGER,
-                    created_at TEXT NOT NULL
-                );
+    def _init_schema(self):
+        with self._get_connection() as c:
+            c.executescript("""
+            CREATE TABLE IF NOT EXISTS experiment_budgets (
+                hypothesis_id INTEGER NOT NULL, cycle_id TEXT NOT NULL,
+                allocated_amount_cents INTEGER NOT NULL, spent_amount_cents INTEGER NOT NULL DEFAULT 0,
+                risk_tier TEXT NOT NULL, max_cpa_target_cents INTEGER, created_at TEXT NOT NULL,
+                PRIMARY KEY(hypothesis_id,cycle_id));
+            CREATE TABLE IF NOT EXISTS experiment_cycle_limits (cycle_id TEXT PRIMARY KEY, limit_cents INTEGER NOT NULL);
+            CREATE TABLE IF NOT EXISTS experiment_budget_events (
+                id INTEGER PRIMARY KEY, hypothesis_id INTEGER, cycle_id TEXT NOT NULL,
+                actor TEXT, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS experiment_evaluations (
+                id INTEGER PRIMARY KEY, hypothesis_id INTEGER NOT NULL, cycle_id TEXT,
+                actor TEXT, payload TEXT NOT NULL, evaluated_at TEXT NOT NULL);
+            """)
+    @staticmethod
+    def _budget(row):
+        return BudgetAllocation(row['hypothesis_id'],row['cycle_id'],row['allocated_amount_cents'],
+            row['spent_amount_cents'],ExperimentRiskTier(row['risk_tier']),row['max_cpa_target_cents'],
+            datetime.fromisoformat(row['created_at'])) if row else None
 
-                CREATE TABLE IF NOT EXISTS growth_statistical_evaluations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    hypothesis_id INTEGER NOT NULL UNIQUE,
-                    control_conversions INTEGER NOT NULL,
-                    control_sample INTEGER NOT NULL,
-                    treatment_conversions INTEGER NOT NULL,
-                    treatment_sample INTEGER NOT NULL,
-                    probability_to_beat_control TEXT NOT NULL,
-                    lift_pct TEXT NOT NULL,
-                    verdict TEXT NOT NULL,
-                    sample_adequacy_ratio TEXT NOT NULL,
-                    evaluated_at TEXT NOT NULL
-                );
-                """
-            )
+    def get_budget_by_hypothesis(self, hypothesis_id, cycle_id=None):
+        with self._get_connection() as c:
+            row = c.execute('SELECT * FROM experiment_budgets WHERE hypothesis_id=?' +
+                            (' AND cycle_id=?' if cycle_id else '') + ' ORDER BY cycle_id DESC LIMIT 1',
+                            (hypothesis_id,cycle_id) if cycle_id else (hypothesis_id,)).fetchone()
+            return self._budget(row)
 
-    def save_budget_allocation(self, allocation: BudgetAllocation) -> BudgetAllocation:
-        with self._get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO growth_budget_allocations (
-                    hypothesis_id, cycle_id, allocated_amount_cents, spent_amount_cents, risk_tier, max_cpa_target_cents, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(hypothesis_id) DO UPDATE SET
-                    allocated_amount_cents = excluded.allocated_amount_cents,
-                    spent_amount_cents = excluded.spent_amount_cents,
-                    risk_tier = excluded.risk_tier,
-                    max_cpa_target_cents = excluded.max_cpa_target_cents;
-                """,
-                (
-                    allocation.hypothesis_id,
-                    allocation.cycle_id,
-                    allocation.allocated_amount_cents,
-                    allocation.spent_amount_cents,
-                    allocation.risk_tier.value,
-                    allocation.max_cpa_target_cents,
-                    allocation.created_at.isoformat(),
-                ),
-            )
-            conn.commit()
-            return allocation
+    def list_budgets_by_cycle(self, cycle_id):
+        with self._get_connection() as c:
+            return [self._budget(r) for r in c.execute('SELECT * FROM experiment_budgets WHERE cycle_id=?',(cycle_id,))]
 
-    def get_budget_by_hypothesis(self, hypothesis_id: int) -> Optional[BudgetAllocation]:
-        with self._get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM growth_budget_allocations WHERE hypothesis_id = ?;", (hypothesis_id,)
-            ).fetchone()
+    def get_cycle_limit(self, cycle_id, default=500000):
+        with self._get_connection() as c:
+            row = c.execute('SELECT limit_cents FROM experiment_cycle_limits WHERE cycle_id=?',(cycle_id,)).fetchone()
+            return row[0] if row else default
+
+    def set_cycle_limit(self, cycle_id, limit_cents, actor=None):
+        cycle_id = cycle_key(cycle_id)
+        if type(limit_cents) is not int or limit_cents <= 0:
+            raise ValueError('O teto deve ser positivo.')
+        with self._get_connection() as c:
+            c.execute('BEGIN IMMEDIATE')
+            total = c.execute('SELECT COALESCE(SUM(allocated_amount_cents),0) FROM experiment_budgets WHERE cycle_id=?',(cycle_id,)).fetchone()[0]
+            if limit_cents < total:
+                raise ValueError('O teto não pode ficar abaixo do orçamento já comprometido.')
+            c.execute('INSERT INTO experiment_cycle_limits VALUES (?,?) ON CONFLICT(cycle_id) DO UPDATE SET limit_cents=excluded.limit_cents',(cycle_id,limit_cents))
+            self._event(c,None,cycle_id,actor,{'limit_cents':limit_cents})
+
+    @staticmethod
+    def _event(c,hypothesis_id,cycle_id,actor,payload):
+        c.execute('INSERT INTO experiment_budget_events (hypothesis_id,cycle_id,actor,payload,created_at) VALUES (?,?,?,?,?)',
+                  (hypothesis_id,cycle_id,actor,json.dumps(payload,default=str),datetime.now(timezone.utc).isoformat()))
+
+    def save_budget_allocation(self, allocation, max_cycle_budget_cents=500000, actor=None):
+        cycle_key(allocation.cycle_id)
+        with self._get_connection() as c:
+            c.execute('BEGIN IMMEDIATE')
+            row = c.execute('SELECT limit_cents FROM experiment_cycle_limits WHERE cycle_id=?',(allocation.cycle_id,)).fetchone()
+            limit = row[0] if row else max_cycle_budget_cents
+            committed = c.execute('SELECT COALESCE(SUM(allocated_amount_cents),0) FROM experiment_budgets WHERE cycle_id=? AND hypothesis_id!=?',(allocation.cycle_id,allocation.hypothesis_id)).fetchone()[0]
+            if committed + allocation.allocated_amount_cents > limit:
+                raise ValueError(f"Teto orçamentário do ciclo '{allocation.cycle_id}' excedido. Disponível: R$ {(limit-committed)/100:.2f}")
+            c.execute("""INSERT INTO experiment_budgets VALUES (?,?,?,?,?,?,?) ON CONFLICT(hypothesis_id,cycle_id)
+                DO UPDATE SET allocated_amount_cents=excluded.allocated_amount_cents,
+                risk_tier=excluded.risk_tier,max_cpa_target_cents=excluded.max_cpa_target_cents""",
+                (allocation.hypothesis_id,allocation.cycle_id,allocation.allocated_amount_cents,allocation.spent_amount_cents,
+                 allocation.risk_tier.value,allocation.max_cpa_target_cents,allocation.created_at.isoformat()))
+            self._event(c,allocation.hypothesis_id,allocation.cycle_id,actor,{'allocated_cents':allocation.allocated_amount_cents,'risk':allocation.risk_tier.value,'cpa_cents':allocation.max_cpa_target_cents})
+        return self.get_budget_by_hypothesis(allocation.hypothesis_id,allocation.cycle_id)
+
+    def record_spend(self,hypothesis_id,cycle_id,spent_cents,actor=None):
+        if type(spent_cents) is not int or spent_cents < 0:
+            raise ValueError('Gasto inválido.')
+        with self._get_connection() as c:
+            c.execute('BEGIN IMMEDIATE')
+            row = c.execute('SELECT spent_amount_cents FROM experiment_budgets WHERE hypothesis_id=? AND cycle_id=?',(hypothesis_id,cycle_id)).fetchone()
             if not row:
-                return None
-            return BudgetAllocation(
-                hypothesis_id=row["hypothesis_id"],
-                cycle_id=row["cycle_id"],
-                allocated_amount_cents=row["allocated_amount_cents"],
-                spent_amount_cents=row["spent_amount_cents"],
-                risk_tier=ExperimentRiskTier(row["risk_tier"]),
-                max_cpa_target_cents=row["max_cpa_target_cents"],
-            )
+                raise ValueError('Cadastre o orçamento antes de registrar o gasto.')
+            if spent_cents < row[0]:
+                raise ValueError('O gasto acumulado não pode diminuir.')
+            if spent_cents != row[0]:
+                c.execute('UPDATE experiment_budgets SET spent_amount_cents=? WHERE hypothesis_id=? AND cycle_id=?',(spent_cents,hypothesis_id,cycle_id))
+                self._event(c,hypothesis_id,cycle_id,actor,{'spent_cents':spent_cents})
 
-    def list_budgets_by_cycle(self, cycle_id: str) -> List[BudgetAllocation]:
-        with self._get_connection() as conn:
-            rows = conn.execute(
-                "SELECT * FROM growth_budget_allocations WHERE cycle_id = ?;", (cycle_id,)
-            ).fetchall()
-            return [
-                BudgetAllocation(
-                    hypothesis_id=r["hypothesis_id"],
-                    cycle_id=r["cycle_id"],
-                    allocated_amount_cents=r["allocated_amount_cents"],
-                    spent_amount_cents=r["spent_amount_cents"],
-                    risk_tier=ExperimentRiskTier(r["risk_tier"]),
-                    max_cpa_target_cents=r["max_cpa_target_cents"],
-                )
-                for r in rows
-            ]
+    def budget_history(self,cycle_id):
+        with self._get_connection() as c:
+            return [dict(r) for r in c.execute('SELECT * FROM experiment_budget_events WHERE cycle_id=? ORDER BY id DESC',(cycle_id,))]
 
-    def save_statistical_evaluation(self, evaluation: BayesianExperimentEvaluation) -> None:
-        with self._get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO growth_statistical_evaluations (
-                    hypothesis_id, control_conversions, control_sample, treatment_conversions, treatment_sample,
-                    probability_to_beat_control, lift_pct, verdict, sample_adequacy_ratio, evaluated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(hypothesis_id) DO UPDATE SET
-                    probability_to_beat_control = excluded.probability_to_beat_control,
-                    lift_pct = excluded.lift_pct,
-                    verdict = excluded.verdict,
-                    sample_adequacy_ratio = excluded.sample_adequacy_ratio;
-                """,
-                (
-                    evaluation.hypothesis_id,
-                    evaluation.control_conversions,
-                    evaluation.control_sample,
-                    evaluation.treatment_conversions,
-                    evaluation.treatment_sample,
-                    str(evaluation.probability_to_beat_control),
-                    str(evaluation.lift_pct),
-                    evaluation.verdict.value,
-                    str(evaluation.sample_adequacy_ratio),
-                    evaluation.evaluated_at.isoformat(),
-                ),
-            )
-            conn.commit()
+    def save_statistical_evaluation(self,evaluation,actor=None):
+        if evaluation.cycle_id:
+            cycle_key(evaluation.cycle_id)
+        with self._get_connection() as c:
+            c.execute('INSERT INTO experiment_evaluations (hypothesis_id,cycle_id,actor,payload,evaluated_at) VALUES (?,?,?,?,?)',
+                (evaluation.hypothesis_id,evaluation.cycle_id,actor,json.dumps(asdict(evaluation),default=str),evaluation.evaluated_at.isoformat()))
 
-    def get_evaluation_by_hypothesis(self, hypothesis_id: int) -> Optional[BayesianExperimentEvaluation]:
-        with self._get_connection() as conn:
-            row = conn.execute(
-                "SELECT * FROM growth_statistical_evaluations WHERE hypothesis_id = ?;", (hypothesis_id,)
-            ).fetchone()
-            if not row:
-                return None
-            return BayesianExperimentEvaluation(
-                hypothesis_id=row["hypothesis_id"],
-                control_conversions=row["control_conversions"],
-                control_sample=row["control_sample"],
-                treatment_conversions=row["treatment_conversions"],
-                treatment_sample=row["treatment_sample"],
-                probability_to_beat_control=Decimal(row["probability_to_beat_control"]),
-                lift_pct=Decimal(row["lift_pct"]),
-                verdict=StatisticalSignificanceVerdict(row["verdict"]),
-                sample_adequacy_ratio=Decimal(row["sample_adequacy_ratio"]),
-            )
+    @staticmethod
+    def _evaluation(row):
+        if not row:
+            return None
+        data=json.loads(row['payload'])
+        for key in ('probability_to_beat_control','lift_pct','sample_adequacy_ratio','difference_low_pp','difference_high_pp','significance_threshold_pct'):
+            if key in data and data[key] is not None:
+                data[key]=Decimal(data[key])
+        data['verdict']=StatisticalSignificanceVerdict(data['verdict'])
+        data['evaluated_at']=datetime.fromisoformat(data['evaluated_at'])
+        return BayesianExperimentEvaluation(**data)
+
+    def get_evaluation_by_hypothesis(self,hypothesis_id,cycle_id=None):
+        history=self.evaluation_history(hypothesis_id,cycle_id)
+        return history[0] if history else None
+
+    def evaluation_history(self,hypothesis_id,cycle_id=None):
+        with self._get_connection() as c:
+            rows=c.execute('SELECT * FROM experiment_evaluations WHERE hypothesis_id=?'+(' AND cycle_id=?' if cycle_id else '')+' ORDER BY id DESC',
+                           (hypothesis_id,cycle_id) if cycle_id else (hypothesis_id,)).fetchall()
+            return [self._evaluation(row) for row in rows]
+
+    def cycle_evaluations(self,cycle_id):
+        with self._get_connection() as c:
+            rows=c.execute('SELECT * FROM experiment_evaluations WHERE id IN (SELECT MAX(id) FROM experiment_evaluations WHERE cycle_id=? GROUP BY hypothesis_id) ORDER BY id DESC',(cycle_id,)).fetchall()
+            return [self._evaluation(row) for row in rows]

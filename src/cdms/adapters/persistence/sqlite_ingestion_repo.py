@@ -20,6 +20,17 @@ class SQLiteIngestionRepository:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as conn:
             conn.executescript((Path(__file__).parent / "migrations" / "008_platform_ingestion.sql").read_text(encoding="utf-8"))
+            conn.execute('CREATE TABLE IF NOT EXISTS ritual_metric_sources (cycle_id TEXT PRIMARY KEY, job_id TEXT NOT NULL REFERENCES ingestion_jobs(id), reviewed_by TEXT NOT NULL, reviewed_at TEXT NOT NULL)')
+
+    def record_ritual_source(self, job_id, cycle_id, user_id):
+        with self.connection() as conn:
+            conn.execute('INSERT INTO ritual_metric_sources VALUES (?,?,?,?) ON CONFLICT(cycle_id) DO UPDATE SET job_id=excluded.job_id,reviewed_by=excluded.reviewed_by,reviewed_at=excluded.reviewed_at',
+                         (cycle_id,job_id,user_id,now_utc().isoformat()))
+
+    def ritual_source(self, cycle_id):
+        with self.connection() as conn:
+            row=conn.execute('SELECT * FROM ritual_metric_sources WHERE cycle_id=?',(cycle_id,)).fetchone()
+            return dict(row) if row else None
 
     @contextmanager
     def connection(self):

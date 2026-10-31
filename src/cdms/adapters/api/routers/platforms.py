@@ -1,12 +1,10 @@
 """Conexões de mídia, fila de sincronização e dados preparados para o ritual."""
 from datetime import date
 import os
-import json
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import Field, SecretStr
 from cdms.adapters.api.dependencies import get_workspace_repositories, require_writer, require_manager, WorkspaceRepositories
 from cdms.adapters.api.routers.growth import InputModel
-from cdms.adapters.connectors.meta_ads import MetaAdsConnector, closed_week
 from cdms.adapters.persistence.sqlite_ingestion_repo import SQLiteIngestionRepository
 from cdms.application.ports.platform_connector import PlatformError
 from cdms.config.credential_vault import CredentialVault
@@ -60,28 +58,18 @@ def connect_platform(payload: ConnectPlatformRequest, request: Request,
                      store: WorkspaceRepositories = Depends(get_workspace_repositories)):
     if payload.platform != PlatformType.META_ADS:
         raise HTTPException(501, "Este adaptador ainda não foi implementado. A etapa atual suporta Meta Ads.")
-    MetaAdsConnector.account_id(payload.account_id)
-    token = payload.access_token.get_secret_value()
-    if not token or len(token) > 4096 or not token.isascii() or any(c.isspace() for c in token):
-        raise ValueError("Token da plataforma inválido.")
+    from cdms.application.services.platform_ingestion import PlatformIngestion
+    service = PlatformIngestion(get_repo(store), request.app.state.identity, tenant,
+        request.app.state.platform_connector_factory, lambda: CredentialVault(request.app.state.credential_key),
+        request.app.state.ingestion_dispatcher)
     try:
-        vault = CredentialVault(request.app.state.credential_key)
+        row = service.connect(payload.account_id, payload.access_token.get_secret_value(), payload.api_version,
+            payload.conversion_action_type, payload.app_secret.get_secret_value() if payload.app_secret else None,
+            payload.automatic_sync)
     except RuntimeError:
-        raise HTTPException(503, "Configure CDMS_CREDENTIAL_KEY antes de cadastrar conexões.")
-    secret = payload.app_secret.get_secret_value() if payload.app_secret is not None else None
-    if secret is not None and (not secret or len(secret) > 4096 or not secret.isascii() or any(c.isspace() for c in secret)):
-        raise ValueError("App secret inválido.")
-    credentials = json.dumps({"access_token": token, "app_secret": secret}) if secret else token
-    connection = {"platform": payload.platform.value, "api_version": payload.api_version,
-                  "timezone_name": "UTC", "conversion_action_type": payload.conversion_action_type}
-    try:
-        metadata = request.app.state.platform_connector_factory(connection, credentials).validate_account(payload.account_id)
+        raise HTTPException(503, 'Configure CDMS_CREDENTIAL_KEY antes de cadastrar conexões.') from None
     except PlatformError as exc:
-        raise HTTPException(503 if exc.retryable else 502, exc.code)
-    row = get_repo(store).save_connection(account_id=payload.account_id, encrypted_credentials=vault.encrypt(credentials),
-                                         api_version=payload.api_version, conversion_action_type=payload.conversion_action_type,
-                                         timezone_name=metadata["timezone_name"], currency=metadata["currency"],
-                                         created_by=tenant.user_id, automatic_sync=payload.automatic_sync)
+        raise HTTPException(503 if exc.retryable else 502, exc.code) from None
     return public_connection(row)
 
 
@@ -101,23 +89,15 @@ def deactivate_connection(connection_id: str, _manager: TenantContext = Depends(
 def enqueue_sync(connection_id: str, payload: SyncRequest, request: Request,
                  tenant: TenantContext = Depends(require_writer),
                  store: WorkspaceRepositories = Depends(get_workspace_repositories)):
-    if payload.retry_failed and payload.force_refresh:
-        raise ValueError("Escolha retentativa ou atualização, não ambas.")
+    from cdms.application.services.platform_ingestion import PlatformIngestion
     repo = get_repo(store)
-    connection = repo.get_connection(connection_id)
-    if connection is None:
-        raise HTTPException(404, "Conexão não encontrada neste workspace.")
-    closed_week(payload.cycle_id.isoformat(), connection["timezone_name"])
-    job, changed = repo.enqueue(connection_id, payload.cycle_id.isoformat(), tenant.user_id,
-                                retry_failed=payload.retry_failed, force_refresh=payload.force_refresh)
-    dispatch_status = 'EXISTING'
-    if changed:
-        try:
-            request.app.state.ingestion_dispatcher(tenant.workspace_id, job["id"])
-            dispatch_status = 'ENQUEUED'
-        except Exception:
-            dispatch_status = 'DEFERRED'  # O job permanece persistido para o dispatcher periódico.
-    return {"job": public_job(job), "dispatch_status": dispatch_status}
+    if repo.get_connection(connection_id) is None:
+        raise HTTPException(404, 'Conexão não encontrada neste workspace.')
+    service = PlatformIngestion(repo, request.app.state.identity, tenant,
+        request.app.state.platform_connector_factory, lambda: CredentialVault(request.app.state.credential_key),
+        request.app.state.ingestion_dispatcher)
+    job, status = service.enqueue(connection_id, payload.cycle_id.isoformat(), payload.retry_failed, payload.force_refresh)
+    return {'job': public_job(job), 'dispatch_status': status}
 
 
 @router.get("/jobs")

@@ -1,5 +1,7 @@
 # 📑 SDD — Creator Growth System (CGS)
 
+> Referência histórica. Para os contratos atuais de Studio, identidade, orçamento, A/B, ingestão Meta e Demo 2.0, consulte o [SDD-STUDIO-001 v1.0.0](SDD-STUDIO-001-v1.0.0.md). Exemplos de código, metas de roadmap e números de testes deste documento pertencem à etapa em que foi escrito e não comprovam o estado atual nem uma publicação em produção.
+
 **Documento:** SDD-CGS-001  
 **Versão:** 1.2.0 (Consolidação de Governança Causal, Funil de Dois Passos, Histórico de ROI e Sincronização Bidirecional CDMS)  
 **Status:** APROVADO / EM PRODUÇÃO (100% de Sucesso na Suíte de 51 Testes Automatizados)  

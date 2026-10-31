@@ -21,7 +21,7 @@ from cgs.domain.entities.funnel import ConversionType, FunnelBaseline
 from cgs.domain.entities.hypothesis import HypothesisStatus, MetricDirection, VariableType
 
 
-VERSION = "1.0"
+VERSION = "2.0"
 PACKAGES = ("Tour guiado", "Cobertura completa")
 PATTERNS = (
     "HHHH", "BBBB", "BAHH", "AAAA", "BHHH", "HUHH",
@@ -104,6 +104,17 @@ def create_demo_bundle(base_settings, session_id, anchor, package):
     manage = ManageHypothesesUseCase(growth)
     prepare = PrepareCDMSProposalUseCase(growth_repository=growth)
     audit_case = AuditFunnelOpportunityUseCase(growth)
+    from cgs.adapters.persistence.sqlite_cgs_fase2_repo import SQLiteCGSPhase2Repository
+    from cgs.domain.entities.budget_allocation import BudgetAllocation,ExperimentRiskTier
+    from cgs.domain.services.bayesian_analyzer import BayesianExperimentAnalyzer
+    from cdms.adapters.persistence.sqlite_ingestion_repo import SQLiteIngestionRepository
+    from cdms.application.demo_ingestion import demo_payload,finish_demo_job
+    finance=SQLiteCGSPhase2Repository(staging)
+    ingestion=SQLiteIngestionRepository(staging)
+    connection=ingestion.save_connection(account_id='act_000000001',encrypted_credentials='SIMULATED_NO_CREDENTIALS',
+        api_version='SIMULATED',conversion_action_type='SIMULATED_PURCHASE',timezone_name='America/Sao_Paulo',
+        currency='BRL',created_by='demo',automatic_sync=False)
+    ab_cases=[(20,1000,50,1000,100),(50,1000,15,600,1000),(1,20,2,20,100)]
     for calibration in DEFAULT_CALIBRATIONS.values():
         core.calibrate_metrics_use_case.execute_save(calibration)
     outcomes = list(HypothesisOutcome)
@@ -147,6 +158,19 @@ def create_demo_bundle(base_settings, session_id, anchor, package):
         hypothesis = make_hypothesis(f"[SIMULADO] {row['title']}: testar {variables[index % 5].value}", index,
                                      rows[max(0, index - 1)]["cycle"])
         prepare.execute(hypothesis_id=hypothesis.id, target_cycle_start=cycle)
+        row['hypothesis_id']=hypothesis.id
+        finance.set_cycle_limit(row['cycle'],200000,'demo')
+        amount=10000+index*1000
+        finance.save_budget_allocation(BudgetAllocation(hypothesis.id,row['cycle'],amount,
+            risk_tier=list(ExperimentRiskTier)[index%3]),actor='demo')
+        finance.record_spend(hypothesis.id,row['cycle'],amount+5000 if index%3==1 else amount//2,'demo')
+        evaluation=BayesianExperimentAnalyzer.evaluate(hypothesis.id,*ab_cases[index%3],cycle_id=row['cycle'],
+            event_definition='[SIMULADO] Clique único por exposição no grupo do teste')
+        finance.save_statistical_evaluation(evaluation,'demo')
+        row['ab_verdict']=evaluation.verdict.value
+        job,_=ingestion.enqueue(connection['id'],row['cycle'],'demo')
+        finish_demo_job(ingestion,job,demo_payload(row['cycle'],snapshots))
+        ingestion.record_ritual_source(job['id'],row['cycle'],'demo')
         pending = core.repository.get_pending_decision(before_week_start=cycle, evaluation_as_of=anchor)
         outcome = outcomes[(index - 1) % len(outcomes)] if pending else None
         core.run_weekly_ritual_use_case.execute(
@@ -162,14 +186,34 @@ def create_demo_bundle(base_settings, session_id, anchor, package):
         hypothesis = make_hypothesis(f"[SIMULADO] Próximo teste de {variable.value}", index, rows[-1]["cycle"])
         if index < 3:
             prepare.execute(hypothesis_id=hypothesis.id, target_cycle_start=anchor + timedelta(weeks=index // 2))
+        if index==0:
+            sandbox_hypothesis=hypothesis.id
+            finance.set_cycle_limit(anchor.isoformat(),100000,'demo')
+            finance.save_budget_allocation(BudgetAllocation(hypothesis.id,anchor.isoformat(),30000),actor='demo')
+            finance.record_spend(hypothesis.id,anchor.isoformat(),12000,'demo')
+            finance.save_statistical_evaluation(BayesianExperimentAnalyzer.evaluate(hypothesis.id,*ab_cases[2],cycle_id=anchor.isoformat(),
+                event_definition='[SIMULADO] Clique único por exposição no grupo do teste'),'demo')
+    # Three states in an open cycle allow the complete review/import workflow.
+    job,_=ingestion.enqueue(connection['id'],anchor.isoformat(),'demo')
+    finish_demo_job(ingestion,job,demo_payload(anchor.isoformat()))
+    extra_connections=[]
+    for account in ('act_000000002','act_000000003'):
+        extra_connections.append(ingestion.save_connection(account_id=account,encrypted_credentials='SIMULATED_NO_CREDENTIALS',
+            api_version='SIMULATED',conversion_action_type='SIMULATED_PURCHASE',timezone_name='America/Sao_Paulo',
+            currency='BRL',created_by='demo',automatic_sync=False))
+    failed,_=ingestion.enqueue(extra_connections[1]['id'],anchor.isoformat(),'demo')
+    ingestion.fail(ingestion.claim(failed['id']),'SIMULATED_PERMISSION_ERROR')
+    ingestion.enqueue(extra_connections[0]['id'],anchor.isoformat(),'demo')
     discarded = make_hypothesis("[SIMULADO] Ideia descartada antes do teste", 9, rows[-1]["cycle"])
     manage.discard_hypothesis(discarded.id)
     hypotheses = growth.list_hypotheses(limit=100)
     manifest = {"version": VERSION, "package": package, "anchor": anchor.isoformat(), "cycles": rows,
+                "sandbox_cycle":anchor.isoformat(),"sandbox_hypothesis":sandbox_hypothesis,
                 "catalog_examples": 85 if package == "Cobertura completa" else 0,
                 "counts": {"rituals": len(core.repository.list_rituals(limit=100)),
                            "audits": len(growth.list_funnel_audits(limit=100)), "hypotheses": len(hypotheses),
-                           "statuses": dict(Counter(item.status.value for item in hypotheses))}}
+                           "statuses": dict(Counter(item.status.value for item in hypotheses)),
+                           "budgets":13,"ab_evaluations":13,"simulated_jobs":15,"simulated_connections":3}}
     # Publish only after every use case succeeds. A restore creates a new file;
     # no real or previous demo database is overwritten or deleted.
     staging.rename(target)

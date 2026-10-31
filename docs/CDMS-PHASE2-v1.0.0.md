@@ -1,5 +1,7 @@
 # 🌐 CDMS Fase 2 — Arquitetura Multi-Tenant, Autenticação e API REST
 
+> Referência histórica. Para os contratos atuais de Studio, identidade, orçamento, A/B, ingestão Meta e Demo 2.0, consulte o [SDD-STUDIO-001 v1.0.0](SDD-STUDIO-001-v1.0.0.md). Exemplos de código, metas de roadmap e números de testes deste documento pertencem à etapa em que foi escrito e não comprovam o estado atual nem uma publicação em produção.
+
 **Especificação e Código de Referência:** CDMS-PHASE2-v1.0.0  
 **Subsistema:** `cdms` / `src/cdms/api`  
 **Escopo:** Isolamento de Dados por Workspace (Multi-Tenant), Autenticação OAuth2 / JWT, Repositórios Particionados e Endpoints REST (FastAPI).

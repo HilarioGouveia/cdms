@@ -80,6 +80,10 @@ def render_heading(hypothesis):
         render_tag(hypothesis.tested_variable.value.replace("_", " "), tone)
         render_tag(f"ICE {hypothesis.ice_score}")
     st.caption(f"Hipótese #{hypothesis.id}")
+    from cdms.adapters.ui.evidence_panel import inspect_hypothesis
+    if 'studio_section' in st.session_state:
+        st.button('Ver evidências',icon=':material/article:',key=f'evidence_hypothesis_{hypothesis.id}',
+                  on_click=inspect_hypothesis,args=(hypothesis.id,))
     st.write(f"**Meta:** {hypothesis.target_metric_key} {comparison(hypothesis)} {hypothesis.success_metric_target}{hypothesis.target_metric_unit}")
 
 

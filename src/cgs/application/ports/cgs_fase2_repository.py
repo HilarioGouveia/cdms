@@ -8,11 +8,11 @@ from cgs.domain.entities.statistical_validation import BayesianExperimentEvaluat
 
 class CGSPhase2RepositoryPort(ABC):
     @abstractmethod
-    def save_budget_allocation(self, allocation: BudgetAllocation) -> BudgetAllocation:
+    def save_budget_allocation(self, allocation: BudgetAllocation, max_cycle_budget_cents=500000, actor=None) -> BudgetAllocation:
         pass
 
     @abstractmethod
-    def get_budget_by_hypothesis(self, hypothesis_id: int) -> Optional[BudgetAllocation]:
+    def get_budget_by_hypothesis(self, hypothesis_id: int, cycle_id=None) -> Optional[BudgetAllocation]:
         pass
 
     @abstractmethod
@@ -20,9 +20,9 @@ class CGSPhase2RepositoryPort(ABC):
         pass
 
     @abstractmethod
-    def save_statistical_evaluation(self, evaluation: BayesianExperimentEvaluation) -> None:
+    def save_statistical_evaluation(self, evaluation: BayesianExperimentEvaluation, actor=None) -> None:
         pass
 
     @abstractmethod
-    def get_evaluation_by_hypothesis(self, hypothesis_id: int) -> Optional[BayesianExperimentEvaluation]:
+    def get_evaluation_by_hypothesis(self, hypothesis_id: int, cycle_id=None) -> Optional[BayesianExperimentEvaluation]:
         pass

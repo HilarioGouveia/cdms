@@ -1,4 +1,21 @@
 /* Continuous IDE shell: outer regions are panes, business cards stay inside. */
+.stMainBlockContainer:has(.st-key-studio_login_page) {
+    max-width: none; padding: clamp(40px, 10vh, 104px) 24px 32px;
+}
+.st-key-studio_login_page {gap: 24px;}
+.st-key-studio_login_card {
+    background: var(--studio-surface); border-color: var(--studio-border);
+    border-radius: 16px; padding: 32px; gap: 16px;
+    box-shadow: 0 16px 48px rgb(0 0 0 / 12%);
+}
+.st-key-studio_login_card h1 {font-size: 1.85rem; letter-spacing: -0.6px; line-height: 1.2;}
+.st-key-studio_login_card [data-testid="stForm"] {padding: 0;}
+.st-key-studio_login_card button {min-height: 46px;}
+.st-key-studio_login_card hr {margin: 4px 0;}
+@media (max-width: 600px) {
+    .stMainBlockContainer:has(.st-key-studio_login_page) {padding: 32px 16px;}
+    .st-key-studio_login_card {padding: 24px;}
+}
 .stApp:has(.st-key-studio_titlebar) header[data-testid="stHeader"] { display: none; }
 .stMainBlockContainer:has(.st-key-studio_titlebar) {
     padding: 0 !important;
@@ -303,4 +320,27 @@
 .stApp:has(.st-key-studio_titlebar) [data-testid="stCaptionContainer"],
 .stApp:has(.st-key-studio_titlebar) [data-testid="stCaptionContainer"] p {
     color: var(--studio-muted);
+}
+
+/* Non-modal inspector: keep the main workbench width unchanged. */
+.st-key-studio_evidence_panel {
+    position: fixed; inset: 72px 16px 44px auto;
+    width: min(420px, calc(100vw - 32px)); height: auto;
+    z-index: 1000; padding: 20px;
+    border: 1px solid var(--studio-border); border-radius: 14px;
+    background: var(--studio-surface); color: var(--studio-text);
+    box-shadow: 0 18px 64px rgb(0 0 0 / 30%);
+    overflow-y: auto; overscroll-behavior: contain;
+}
+.st-key-studio_evidence_panel h3 {font-size: 1.15rem;}
+.st-key-evidence_close button {min-width: 36px;}
+.st-key-evidence_close button [data-testid="stMarkdownContainer"] {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap;
+}
+@media (max-width: 900px) {
+    .st-key-studio_evidence_panel {
+        inset: 128px 8px 60px auto; width: calc(100vw - 16px);
+        padding: 16px; border-radius: 12px;
+    }
 }

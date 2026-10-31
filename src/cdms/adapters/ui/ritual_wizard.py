@@ -181,6 +181,10 @@ def render_ritual_wizard(container, today):
             st.session_state[key] = st.session_state[key]
     st.caption(f"Ciclo {week_start:%d/%m/%Y} · {container.settings.TIMEZONE_NAME} · rascunho nesta sessão")
     existing = container.repository.get_ritual_by_cycle(cycle)
+    from cdms.adapters.persistence.sqlite_ingestion_repo import SQLiteIngestionRepository
+    source=SQLiteIngestionRepository(container.settings.DB_PATH).ritual_source(cycle)
+    if source:
+        st.caption(f"Métricas preparadas da importação Meta {source['job_id']} · revisão em {source['reviewed_at']}. Confira os valores antes de concluir.")
     if existing:
         st.success(f"Ritual do ciclo {cycle} concluído. Cenário: {existing.scenario.type.value}")
         st.write(existing.decision.summary)

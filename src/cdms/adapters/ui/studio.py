@@ -1,8 +1,4 @@
-"""Studio local: navegação e evidências ao redor dos fluxos CDMS/CGS existentes.
-
-O workspace local não representa um tenant autenticado. Somente a futura
-interface de API poderá selecionar organizações e permissões de usuários.
-"""
+"""Studio com sessão autenticada por workspace e modo local explícito."""
 from datetime import date, timedelta
 from html import escape
 from pathlib import Path
@@ -24,6 +20,10 @@ SECTIONS = {
 }
 
 PAGES = {
+    "Configurações": {
+        "users": ("Gerenciar usuários", "manage_accounts"),
+        "integrations": ("Integrações", "hub"),
+    },
     "Governança": {
         "ritual": ("Ritual semanal", "fact_check"),
         "history": ("Histórico e tendências", "monitoring"),
@@ -33,6 +33,8 @@ PAGES = {
     "Experimentos": {
         "diagnosis": ("Diagnóstico do funil", "analytics"),
         "backlog": ("Backlog e hipóteses", "science"),
+        "budget": ("Orçamento dos testes", "account_balance_wallet"),
+        "ab_evaluation": ("Avaliação A/B", "compare_arrows"),
         "baseline": ("Baseline do funil", "tune"),
         "report": ("Relatório executivo", "description"),
     },
@@ -43,6 +45,10 @@ PAGES = {
 }
 
 PAGE_DESCRIPTIONS = {
+    "integrations": "Conecte contas Meta Ads e configure a coleta semanal de métricas.",
+    "budget": "Defina o limite do ciclo, aloque recursos e acompanhe os gastos por hipótese.",
+    "ab_evaluation": "Compare controle e tratamento com probabilidade de ganho e incerteza.",
+    "users": "Cadastre pessoas e gerencie perfis e acessos ao workspace.",
     "demo_data": "Prepare um ambiente simulado para apresentar os fluxos do CDMS.",
     "demo_catalog": "Explore as combinações heurísticas sem alterar dados.",
     "ritual": "Uma decisão prioritária, com hipótese, critério e prazo.",
@@ -79,15 +85,38 @@ def toggle(key):
     st.session_state[key] = not st.session_state[key]
 
 
-def render_statusbar(is_demo, cycle, rules_version):
+def sync_cycle(source, target):
+    st.session_state[target] = st.session_state[source]
+
+
+def render_context_controls(session, *, mobile=False):
+    if session:
+        from cdms.adapters.ui.studio_auth import render_workspace_selector
+        render_workspace_selector(session, 'mobile_account_workspace' if mobile else 'account_workspace')
+    elif not mobile:
+        st.selectbox('Workspace', [LOCAL, DEMO], key='studio_workspace', on_change=switch_workspace)
+    else:
+        st.selectbox('Workspace', [LOCAL, DEMO], index=[LOCAL, DEMO].index(st.session_state.studio_workspace),
+                     key='mobile_workspace', on_change=sync_local_workspace)
+    key, other = ('mobile_studio_cycle', 'studio_cycle') if mobile else ('studio_cycle', 'mobile_studio_cycle')
+    st.session_state.setdefault(key, st.session_state['studio_cycle'])
+    st.date_input('Ciclo de referência do Cockpit', key=key, on_change=sync_cycle, args=(key, other))
+
+
+def sync_local_workspace():
+    st.session_state['studio_workspace'] = st.session_state['mobile_workspace']
+    switch_workspace()
+
+
+def render_statusbar(is_demo, cycle, rules_version, session=None):
     """Report only known local state; no inferred API/telemetry health."""
-    context = "DEMO · DADOS SIMULADOS" if is_demo else "Local"
+    context = session.workspace_name if session else ("DEMO · DADOS SIMULADOS" if is_demo else "Local")
+    connection = "● Sessão autenticada" if session else "● Modo local"
     with st.container(key="studio_statusbar"):
         st.html(
             '<div class="studio-status" role="status" aria-live="polite">'
             '<span class="studio-status-connections">'
-            '<span title="Este Studio acessa o banco diretamente; não utiliza a API.">'
-            '● Modo local</span><span class="studio-status-telemetry"> · Telemetria não configurada</span></span>'
+            f'<span>{connection}</span><span class="studio-status-telemetry"> · Telemetria não configurada</span></span>'
             '<span class="studio-status-execution">Painel carregado</span>'
             f'<span class="studio-status-context">{escape(context)}'
             f'<span class="studio-status-cycle"> · Ciclo {cycle:%d/%m/%Y}</span>'
@@ -178,10 +207,17 @@ def run_studio():
     from cdms.adapters.ui.theme import apply_shell_theme
     apply_shell_theme()
     st.html(Path(__file__).parent / "styles" / "studio.css")
-    initialize_workspace()
+    from cdms.adapters.ui.studio_auth import require_session, render_account, session_container
+    from cdms.domain.entities.tenant import UserRole
+    session = require_session()
+    if session:
+        apply_shell_theme()
+    else:
+        initialize_workspace()
     defaults = {"studio_section": "Cockpit", "studio_explorer": True,
-                "studio_evidence": True, "studio_page_Governança": "ritual",
+                "studio_evidence": False, "studio_page_Governança": "ritual",
                 "studio_page_Experimentos": "diagnosis", "studio_page_Demonstração": "demo_data"}
+    defaults['studio_page_Configurações'] = 'users'
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
     # Retain draft widgets when their module is not rendered. Do not retain
@@ -189,6 +225,7 @@ def run_studio():
     draft_prefixes = (
         "dec_", "val_", "avail_", "reason_", "custom_reason_", "cal_",
         "growth_", "ritual_learning_",
+        "experiment_draft_",
     )
     for key in list(st.session_state):
         if key.startswith(draft_prefixes) or key in (
@@ -196,90 +233,154 @@ def run_studio():
         ):
             st.session_state[key] = st.session_state[key]
 
-    core = workspace_container()
-    is_demo = st.session_state.studio_workspace == DEMO
+    core = session_container(session) if session else workspace_container()
+    is_demo = session is None and st.session_state.studio_workspace == DEMO
+    pages={section:dict(items) for section,items in PAGES.items()}
+    if is_demo:
+        pages['Configurações']={'integrations':PAGES['Configurações']['integrations']}
+        st.session_state['studio_page_Configurações']='integrations'
+    read_only = session is not None and session.tenant.role == UserRole.VIEWER
     sections = {**SECTIONS, "Demonstração": "science"} if is_demo else SECTIONS
+    if is_demo or (session and session.tenant.role in (UserRole.OWNER, UserRole.ADMIN)):
+        sections = {**sections, 'Configurações': 'settings'}
     growth = SQLiteGrowthRepository(str(core.settings.DB_PATH))
+    today = date.today()
+    st.session_state.setdefault('studio_cycle', today - timedelta(days=today.weekday()))
+    # Keep the chosen cycle when the desktop explorer is collapsed.
+    st.session_state['studio_cycle'] = st.session_state['studio_cycle']
+    cycle = st.session_state['studio_cycle']
+    st.session_state['mobile_studio_cycle'] = cycle
+    if not session:
+        st.session_state['studio_workspace'] = st.session_state['studio_workspace']
+        st.session_state['mobile_workspace'] = st.session_state['studio_workspace']
     with st.container(key="studio_titlebar", horizontal=True):
         st.markdown(":material/space_dashboard: **CDMS STUDIO · DADOS SIMULADOS**" if is_demo else ":material/space_dashboard: **CDMS STUDIO**")
-        st.caption("Workspace CDMS Demo" if is_demo else "Workspace local / Decision Cockpit")
+        st.caption(session.workspace_name if session else ("Workspace CDMS Demo" if is_demo else "Workspace local / Decision Cockpit"))
         st.space("stretch")
-        st.button("Navegação", icon=":material/left_panel_close:",
-                  key="studio_toggle_explorer", on_click=toggle, args=("studio_explorer",))
-        st.button("Evidências", icon=":material/right_panel_close:",
+        st.button("Evidências", icon=":material/right_panel_close:" if st.session_state.studio_evidence else ":material/right_panel_open:",
+                  type='primary' if st.session_state.studio_evidence else 'secondary',
                   key="studio_toggle_evidence", on_click=toggle, args=("studio_evidence",))
 
         # Small-screen ritual uses popovers rather than stacking the side panes.
         with st.container(key="studio_mobile_tools", horizontal=True, width="content"):
             with st.popover("Seções", icon=":material/menu:"):
+                render_context_controls(session, mobile=True)
                 active_section = st.session_state.studio_section
-                for target_page, (label, icon) in PAGES.get(active_section, {}).items():
+                for target_page, (label, icon) in pages.get(active_section, {}).items():
                     st.button(label, icon=f":material/{icon}:", key=f"mobile_page_{target_page}",
                               on_click=select_page, args=(active_section, target_page), width="stretch")
-            with st.popover("Evidências", icon=":material/article:"):
-                mobile_cycle = st.session_state.get("studio_cycle")
-                st.caption(f"Ciclo do Cockpit · {mobile_cycle.isoformat()}" if mobile_cycle else "Ciclo de referência do Cockpit")
-                mobile_audit = growth.get_funnel_audit(mobile_cycle.isoformat()) if mobile_cycle else None
-                st.write(mobile_audit.diagnosis_summary if mobile_audit else "Nenhum diagnóstico salvo para este ciclo.")
+            st.button('Evidências',icon=':material/article:',key='mobile_evidence',
+                      on_click=toggle,args=('studio_evidence',))
 
-        with st.popover("Workspace e ciclo", icon=":material/workspaces:"):
-            st.selectbox("Workspace", [LOCAL, DEMO], key="studio_workspace", on_change=switch_workspace,
-                         help="Local e demonstração usam bancos separados. Organizações autenticadas continuam na API.")
-            today = date.today()
-            st.session_state.setdefault("studio_cycle", today - timedelta(days=today.weekday()))
-            cycle = st.date_input("Ciclo de referência do Cockpit",
-                                 key="studio_cycle")
-            st.caption("Dados simulados · ambiente de apresentação" if is_demo else "Modo local · sem autenticação · dados deste ambiente")
-    if cycle.weekday() != 0:
-        st.error("Selecione uma segunda-feira para o ciclo do Cockpit.")
-        return
+        if session:
+            render_account(session)
+
+    if session and st.session_state.get('_account_page'):
+        from cdms.adapters.ui.studio_auth import auth_service
+        from cdms.adapters.ui.studio_users import password_form
+        with st.container(key='studio_editor'):
+            if st.button('Voltar ao painel', key='account_back'):
+                st.session_state.pop('_account_page', None)
+                st.rerun()
+            password_form(auth_service(), session)
+        st.stop()
+
     weights = [0.5] + ([2.15] if st.session_state.studio_explorer else []) + [6]
-    if st.session_state.studio_evidence:
-        weights.append(3.2)
     with st.container(key="studio_workbench", gap=None):
         panels = iter(st.columns(weights, gap=None))
     dock = next(panels)
     explorer = next(panels) if st.session_state.studio_explorer else None
     editor = next(panels)
-    evidence = next(panels) if st.session_state.studio_evidence else None
     with dock, st.container(key="studio_dock"):
+        st.button("Navegação", icon=":material/left_panel_close:" if st.session_state.studio_explorer else ":material/left_panel_open:",
+                  help="Recolher navegação" if st.session_state.studio_explorer else "Expandir navegação",
+                  key="studio_toggle_explorer", on_click=toggle, args=("studio_explorer",), width="stretch")
         for section, icon in sections.items():
             st.button(section, icon=f":material/{icon}:", help=section,
                       type="primary" if st.session_state.studio_section == section else "secondary",
                       key=f"studio_nav_{section}", on_click=navigate, args=(section,), width="stretch")
     if explorer is not None:
         with explorer, st.container(key="studio_explorer_panel"):
+            render_context_controls(session)
+            st.divider()
             section = st.session_state.studio_section
-            st.caption(section.upper() if section in PAGES else "ESPAÇO DE TRABALHO")
+            st.caption(section.upper() if section in pages else "ESPAÇO DE TRABALHO")
             with st.container(border=True):
-                st.markdown(f":material/folder_open: **{st.session_state.studio_workspace}**")
-                st.divider()
-                if section in PAGES:
-                    for page, (label, icon) in PAGES[section].items():
+                if section in pages:
+                    for page, (label, icon) in pages[section].items():
                         st.button(label, icon=f":material/{icon}:",
                                   type="primary" if st.session_state[f"studio_page_{section}"] == page else "tertiary",
                                   key=f"studio_page_{page}", on_click=select_page,
                                   args=(section, page), width="stretch")
                 else:
                     st.markdown(":material/space_dashboard: **Visão do ciclo**")
-            st.caption(f"Ciclo de referência · {cycle:%d/%m/%Y}")
             descriptions = {
                 "Demonstração": "Pacotes simulados e catálogo de cenários para apresentação.",
                 "Cockpit": "Visão do ciclo, oportunidade estimada e próximas decisões.",
                 "Governança": "Ritual semanal, histórico, exportação e calibrações.",
                 "Experimentos": "Diagnóstico do funil, backlog ICE, baseline e relatório.",
+                "Configurações": "Usuários, perfis e permissões do workspace.",
             }
             st.write(descriptions[st.session_state.studio_section])
     with editor, st.container(key="studio_editor"):
+        if cycle.weekday() != 0:
+            st.error('Selecione uma segunda-feira para o ciclo do Cockpit.')
+            return
         section = st.session_state.studio_section
-        if section in PAGES:
+        if section in pages:
             page = st.session_state[f"studio_page_{section}"]
             with st.container(key="studio_page_heading"):
                 st.caption(f"CDMS / {section.upper()}")
-                st.subheader(PAGES[section][page][0])
+                st.subheader(pages[section][page][0])
                 st.caption(PAGE_DESCRIPTIONS[page])
-        if section == "Cockpit":
+        if read_only and ((section == "Governança" and page in {"ritual", "calibration"})
+                          or (section == "Experimentos" and page in {"diagnosis", "baseline"})):
+            st.info("Seu perfil permite somente leitura. Consulte o Cockpit, histórico, backlog e relatórios.")
+        elif read_only and section == "Experimentos" and page == "backlog":
+            st.info("Acesso somente de leitura.")
+            hypotheses = growth.list_hypotheses(limit=500)
+            if not hypotheses:
+                st.write("Nenhuma hipótese registrada neste workspace.")
+            for hypothesis in hypotheses:
+                with st.container(border=True):
+                    st.write(hypothesis.action_description)
+                    st.caption(f"{hypothesis.status.value} · {hypothesis.tested_variable.value} · ICE {hypothesis.ice_score}")
+                    from cdms.adapters.ui.evidence_panel import inspect_hypothesis
+                    st.button('Ver evidências',key=f'viewer_evidence_{hypothesis.id}',
+                              on_click=inspect_hypothesis,args=(hypothesis.id,))
+        elif section == 'Configurações':
+            if session or is_demo:
+                if page == 'integrations':
+                    from cdms.adapters.ui.platform_ingestion_page import render_integrations
+                    render_integrations(core,session)
+                else:
+                    from cdms.adapters.ui.studio_auth import auth_service
+                    from cdms.adapters.ui.studio_users import render_users
+                    render_users(auth_service(), session)
+            else:
+                st.info('Entre com uma conta para gerenciar usuários.')
+        elif section == "Cockpit":
             render_cockpit(core, growth, cycle.isoformat())
+            from cgs.adapters.persistence.sqlite_cgs_fase2_repo import SQLiteCGSPhase2Repository
+            finance=SQLiteCGSPhase2Repository(core.settings.DB_PATH)
+            budgets=finance.list_budgets_by_cycle(cycle.isoformat())
+            with st.container(border=True):
+                st.subheader('Investimento em experimentos')
+                allocated=sum(b.allocated_amount_cents for b in budgets)/100
+                spent=sum(b.spent_amount_cents for b in budgets)/100
+                st.write(f'Comprometido: R$ {allocated:,.2f} · Gasto: R$ {spent:,.2f} · Teto: R$ {finance.get_cycle_limit(cycle.isoformat())/100:,.2f}')
+                if spent > allocated:
+                    st.warning('Gasto acima do orçamento alocado.')
+                st.button('Abrir orçamento',on_click=navigate,args=('Experimentos','budget'),key='cockpit_budget')
+                evaluations=finance.cycle_evaluations(cycle.isoformat())
+                if evaluations:
+                    st.write('Últimas avaliações A/B do ciclo')
+                    st.dataframe([{'Hipótese':e.hypothesis_id,'Probabilidade de ganho (%)':float(e.probability_to_beat_control),
+                                   'Amostra suficiente':e.verdict.value!='INCONCLUSIVE_INSUFFICIENT_SAMPLE',
+                                   'Data':e.evaluated_at.isoformat()} for e in evaluations],hide_index=True)
+                    st.button('Revisar avaliações A/B',on_click=navigate,args=('Experimentos','ab_evaluation'),key='cockpit_ab')
+            from cdms.adapters.ui.platform_ingestion_page import render_imports
+            render_imports(core,session,cycle.isoformat())
         elif section == "Governança":
             from cdms.adapters.ui.streamlit_app import run_app
             run_app(embedded=True, section=page, container=core)
@@ -290,22 +391,14 @@ def run_studio():
                     render_demo_catalog()
                 else:
                     render_demo_data()
+        elif section == 'Experimentos' and page in {'budget','ab_evaluation'}:
+            from cgs.adapters.ui.experiment_finance_page import render_experiment_finance
+            render_experiment_finance(core,growth,cycle.isoformat(),page,session)
         else:
             from cgs.adapters.ui.growth_engine_page import render_growth_engine
             render_growth_engine(db_path=str(core.settings.DB_PATH), section=page)
-    if evidence is not None:
-        with evidence, st.container(key="studio_evidence_panel"):
-            st.caption("REGISTRO TÉCNICO / CDMS")
-            st.subheader("Evidências do ciclo")
-            st.caption(cycle.isoformat())
-            audit = growth.get_funnel_audit(cycle.isoformat())
-            if audit:
-                st.caption("FONTE / DIAGNÓSTICO PERSISTIDO")
-                st.write(audit.diagnosis_summary)
-                st.caption(f"Cálculo v{audit.calculation_version}")
-            else:
-                st.write("Nenhum diagnóstico salvo para este ciclo.")
-            st.divider()
-            st.caption(f"REFERÊNCIA / REGRAS v{core.settings.RULES_VERSION}")
-            st.caption("Assistente ainda não conectado. Este painel exibe evidências persistidas.")
-    render_statusbar(is_demo, cycle, core.settings.RULES_VERSION)
+    if st.session_state.studio_evidence:
+        from cdms.adapters.ui.evidence_panel import render_evidence
+        with st.container(key='studio_evidence_panel'):
+            render_evidence(core,growth,cycle.isoformat(),session)
+    render_statusbar(is_demo, cycle, core.settings.RULES_VERSION, session)

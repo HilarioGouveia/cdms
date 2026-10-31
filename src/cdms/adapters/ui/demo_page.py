@@ -8,7 +8,7 @@ import streamlit as st
 
 from cdms.application.demo_data import PACKAGES, VERSION, scenario_catalog, tour_preview
 from cdms.adapters.ui.components.scenario_card import render_scenario_card
-from cdms.adapters.ui.studio_workspaces import load_demo, present_cycle
+from cdms.adapters.ui.studio_workspaces import load_demo, present_cycle,open_demo_practice
 
 
 def render_demo_data():
@@ -23,6 +23,8 @@ def render_demo_data():
     with st.container(border=True):
         st.markdown("**Prévia do pacote**")
         st.write("12 ciclos · 12 diagnósticos · 18 hipóteses · 11 aprendizados auditados")
+        st.write('13 orçamentos · 13 avaliações A/B · 15 coletas Meta fictícias')
+        st.caption('Inclui gastos acima do alocado, ganho/perda/amostra insuficiente e um ciclo aberto para praticar a importação. Simulação offline, sem token ou Redis.')
         st.caption("Venda direta e leads; estabilidade, queda, assimetria, escala, dados indisponíveis e recalibração.")
         if package == "Cobertura completa":
             st.write("Inclui o catálogo de 81 combinações e 4 exemplos de indisponibilidade.")
@@ -34,7 +36,7 @@ def render_demo_data():
     st.caption("Carregar cria um novo conjunto simulado. Restaurar volta ao pacote inicial e reinicia os rascunhos do Demo nesta sessão.")
     with st.container(horizontal=True):
         st.button("Carregar pacote", key="demo_load", type="primary", on_click=load_demo,
-                  disabled=bool(manifest and manifest["package"] == package))
+                  disabled=bool(manifest and manifest["package"] == package and manifest.get('version')==VERSION))
         st.button("Restaurar pacote inicial", key="demo_restore", disabled=not bool(manifest),
                   on_click=load_demo, args=(True,))
     if st.session_state.get("_demo_notice"):
@@ -42,7 +44,12 @@ def render_demo_data():
     if st.session_state.get("_demo_error"):
         st.error(st.session_state["_demo_error"])
     if manifest:
-        st.caption(f"Pacote carregado · {manifest['package']} · v{VERSION}")
+        st.caption(f"Pacote carregado · {manifest['package']} · v{manifest.get('version','1.0')}")
+        if manifest.get('version')!=VERSION:
+            st.info('Há uma nova versão do Demo. Carregue o pacote novamente para incluir orçamento, A/B e importações simuladas.')
+        if manifest.get('sandbox_cycle'):
+            st.button('Praticar orçamento, A/B e importação',key='demo_practice',on_click=open_demo_practice)
+            st.caption(f"Ciclo de prática: {manifest['sandbox_cycle']} · Não possui ritual encerrado no pacote inicial.")
         selected = st.selectbox("Ciclo do tour", [row["cycle"] for row in manifest["cycles"]], index=11, key="demo_tour_cycle")
         row = next(item for item in manifest["cycles"] if item["cycle"] == selected)
         st.write(f"**{row['title']}** · {row['scenario']} · {row['funnel']}")
